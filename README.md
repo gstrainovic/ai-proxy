@@ -64,6 +64,10 @@ docker build -t ai-proxy .
 docker run --env-file .env -p 8787:8787 ai-proxy
 ```
 
+## Geplant: Payrexx als zweiter Zahlungsanbieter
+
+Beide Apps wechseln auf Payrexx (CH, günstiger, Daten in der Schweiz; Entscheidung und Preise in dms/AGENTS.md). Dafür wird `billing.ts` hinter eine Schnittstelle gezogen: Stripe bleibt, Payrexx kommt dazu (Gateway mit `subscriptionState`, Webhook `X-Webhook-Signature` HMAC-SHA256 hex über den Raw-Body, Status active/overdue/failed/cancelled/in_notice, Kundenportal `POST /AuthToken`, Kündigen `DELETE /Subscription/{id}`, Auth `X-API-KEY`). Start, sobald das Payrexx-Konto freigegeben ist.
+
 ## Lizenz
 
 AGPL-3.0-only, siehe `LICENSE`.
