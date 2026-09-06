@@ -1,0 +1,49 @@
+{
+  "name": "@strainovic/ai-proxy",
+  "version": "0.1.0",
+  "description": "AI-Proxy: hält den Mistral-Key, zählt Nutzung pro Nutzer und Monat, setzt Plan-Limits durch, Stripe-Abos. Hono, läuft auf Node und in Supabase Edge Functions.",
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "author": "Goran Strainovic, Strainovic IT",
+  "repository": "github:gstrainovic/ai-proxy",
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "ai-proxy": "./src/node.ts"
+  },
+  "exports": {
+    ".": "./src/app.ts",
+    "./plans": "./src/plans.ts",
+    "./limits": "./src/limits.ts",
+    "./billing": "./src/billing.ts",
+    "./config": "./src/config.ts",
+    "./auth/instant": "./src/auth/instant.ts",
+    "./stores/types": "./src/stores/types.ts",
+    "./stores/memory": "./src/stores/memory.ts",
+    "./stores/instant": "./src/stores/instant.ts"
+  },
+  "files": [
+    "src",
+    "Dockerfile",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/node.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.1",
+    "@instantdb/admin": "0.22.121",
+    "hono": "^4.13.7",
+    "stripe": "^22.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.9",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.11"
+  }
+}
