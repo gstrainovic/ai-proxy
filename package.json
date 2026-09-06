@@ -14,30 +14,36 @@
   },
   "exports": {
     ".": "./src/app.ts",
-    "./plans": "./src/plans.ts",
-    "./limits": "./src/limits.ts",
+    "./auth/instant": "./src/auth/instant.ts",
+    "./auth/supabase": "./src/auth/supabase.ts",
     "./billing": "./src/billing.ts",
     "./config": "./src/config.ts",
-    "./auth/instant": "./src/auth/instant.ts",
-    "./stores/types": "./src/stores/types.ts",
+    "./edge": "./src/edge.ts",
+    "./limits": "./src/limits.ts",
+    "./plans": "./src/plans.ts",
+    "./stores/instant": "./src/stores/instant.ts",
     "./stores/memory": "./src/stores/memory.ts",
-    "./stores/instant": "./src/stores/instant.ts"
+    "./stores/supabase": "./src/stores/supabase.ts",
+    "./stores/types": "./src/stores/types.ts"
   },
   "files": [
     "src",
     "Dockerfile",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "deno.json"
   ],
   "scripts": {
     "start": "node --env-file-if-exists=.env src/node.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "test:deno": "deno check src/edge.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
     "@instantdb/admin": "0.22.121",
+    "@supabase/supabase-js": "^2.115.0",
     "hono": "^4.13.7",
     "stripe": "^22.6.1"
   },

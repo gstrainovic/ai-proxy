@@ -53,8 +53,9 @@ async function planFor(store: Store, userId: string): Promise<PlanId> {
   return sub && sub.status === 'active' ? sub.plan : 'free'
 }
 
-/** Erlaubte Modelle im Abo-Modus (Kostenkontrolle): Chat nur Small, OCR nur das OCR-Modell. */
+/** Erlaubte Modelle im Abo-Modus (Kostenkontrolle): Chat nur Small, Embeddings nur mistral-embed, OCR nur das OCR-Modell. */
 export const ALLOWED_CHAT_MODELS = new Set(['mistral-small-latest'])
+export const ALLOWED_EMBED_MODELS = new Set(['mistral-embed'])
 
 /** Fehlerformat wie Mistral (`object: 'error'`, `message`), damit das AI SDK unsere Meldung durchreicht. */
 function mistralError(c: Context, status: 400 | 402, type: string, message: string, extra: Record<string, unknown> = {}) {
@@ -73,8 +74,13 @@ function limitError(c: Context, kind: LimitKind, plan: PlanId, limit: number) {
   return mistralError(c, 402, 'limit_reached', message, { kind, plan, limit })
 }
 
-export function createApp(deps: AppDeps): App {
-  const app: App = new Hono()
+export interface AppOptions {
+  /** Pfad-Präfix, z. B. `/ai-proxy` in Supabase Edge Functions (`/functions/v1/ai-proxy/...`). */
+  basePath?: string
+}
+
+export function createApp(deps: AppDeps, options: AppOptions = {}): App {
+  const app: App = options.basePath ? new Hono<{ Variables: Variables }>().basePath(options.basePath) : new Hono()
 
   app.use('*', cors({ origin: deps.corsOrigin ?? '*', allowHeaders: ['Authorization', 'Content-Type', 'x-user-id'] }))
 
@@ -147,6 +153,8 @@ export function createApp(deps: AppDeps): App {
 
   app.post('/v1/chat/completions', c => forward(c, '/chat/completions', 'chatTokens', body => Number(body?.usage?.total_tokens ?? 0), ALLOWED_CHAT_MODELS))
   app.post('/v1/ocr', c => forward(c, '/ocr', 'ocrPages', body => Number(body?.usage_info?.pages_processed ?? 0)))
+  // Embedding-Tokens zählen auf das Chat-Token-Kontingent (gleiche Grössenordnung, kein eigener Zähler nötig)
+  app.post('/v1/embeddings', c => forward(c, '/embeddings', 'chatTokens', body => Number(body?.usage?.total_tokens ?? 0), ALLOWED_EMBED_MODELS))
 
   app.get('/me/usage', async (c) => {
     const user = c.get('user')

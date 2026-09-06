@@ -208,3 +208,46 @@ describe('test hook /test/usage', () => {
     expect(res.status).toBe(404)
   })
 })
+
+describe('embeddings proxy', () => {
+  it('forwards to /embeddings and counts total_tokens as chatTokens', async () => {
+    const { app, calls, store } = setup({
+      mistralFetch: async (url, init) => {
+        calls.push({ url: String(url), init: init ?? {} })
+        return mistralResponse({ data: [{ embedding: [0.1], index: 0 }], usage: { prompt_tokens: 42, total_tokens: 42, completion_tokens: 0 } })
+      },
+    })
+    const res = await app.request('/v1/embeddings', {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify({ model: 'mistral-embed', input: ['Hallo'] }),
+    })
+    expect(res.status).toBe(200)
+    expect(calls[0].url).toBe('https://mistral.test/v1/embeddings')
+    expect((calls[0].init.headers as Record<string, string>).Authorization).toBe('Bearer server-secret-key')
+    expect((await store.getUsage('user-1', currentMonth())).chatTokens).toBe(42)
+  })
+
+  it('rejects models other than mistral-embed', async () => {
+    const { app, calls } = setup()
+    const res = await app.request('/v1/embeddings', {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify({ model: 'mistral-large-latest', input: ['x'] }),
+    })
+    expect(res.status).toBe(400)
+    expect(calls).toHaveLength(0)
+  })
+
+  it('blocks embeddings when the chat token limit is reached', async () => {
+    const { app, calls, store } = setup()
+    await store.addUsage('user-1', currentMonth(), { chatTokens: PLANS.free.limits.chatTokens, ocrPages: 0 })
+    const res = await app.request('/v1/embeddings', {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify({ model: 'mistral-embed', input: ['x'] }),
+    })
+    expect(res.status).toBe(402)
+    expect(calls).toHaveLength(0)
+  })
+})
