@@ -1,12 +1,12 @@
 import type { Context } from 'hono'
-import type { LimitKind, PlanId } from './plans.ts'
+import type { LimitKind, PlanCatalog } from './plans.ts'
 import type { BillingDeps } from './billing.ts'
 import type { Store } from './stores/types.ts'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { LIMIT_LABELS, PLANS } from './plans.ts'
+import { DEFAULT_CATALOG, LIMIT_LABELS } from './plans.ts'
 import { createCheckout, createPortal, handleWebhook, notConfigured } from './billing.ts'
-import { checkLimit, currentMonth } from './limits.ts'
+import { checkLimit, currentMonth, resolvePlan } from './limits.ts'
 
 export interface AuthUser {
   id: string
@@ -24,6 +24,13 @@ export interface AppDeps {
   corsOrigin?: string
   /** Stripe-Anbindung; null/undefined = Zahlung nicht konfiguriert (Endpoints antworten 501). */
   billing?: BillingDeps | null
+  /** Plan-Katalog der App; Default: auto-service-Pläne. */
+  plans?: PlanCatalog
+  /**
+   * Geheimnis für Server-zu-Server-Aufrufe im Namen eines Nutzers (z. B. Pipeline-Functions):
+   * Bearer = internalToken plus Header `x-user-id`. Ohne x-user-id wird abgelehnt.
+   */
+  internalToken?: string
 }
 
 interface Variables {
@@ -35,6 +42,10 @@ export type App = Hono<{ Variables: Variables }>
 async function resolveUser(c: Context, deps: AppDeps): Promise<AuthUser | null> {
   const header = c.req.header('authorization') ?? ''
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : ''
+  if (token && deps.internalToken && token === deps.internalToken) {
+    const id = c.req.header('x-user-id')
+    return id ? { id } : null
+  }
   if (token) {
     const user = await deps.verifyToken(token).catch(() => null)
     if (user)
@@ -48,9 +59,9 @@ async function resolveUser(c: Context, deps: AppDeps): Promise<AuthUser | null> 
   return null
 }
 
-async function planFor(store: Store, userId: string): Promise<PlanId> {
+async function planFor(store: Store, userId: string, catalog: PlanCatalog): Promise<string> {
   const sub = await store.getSubscription(userId)
-  return sub && sub.status === 'active' ? sub.plan : 'free'
+  return resolvePlan(sub && sub.status === 'active' ? sub.plan : undefined, catalog)
 }
 
 /** Erlaubte Modelle im Abo-Modus (Kostenkontrolle): Chat nur Small, Embeddings nur mistral-embed, OCR nur das OCR-Modell. */
@@ -69,8 +80,8 @@ function mistralError(c: Context, status: 400 | 402, type: string, message: stri
   }, status)
 }
 
-function limitError(c: Context, kind: LimitKind, plan: PlanId, limit: number) {
-  const message = `Monatslimit erreicht: ${limit} ${LIMIT_LABELS[kind]} im Plan ${PLANS[plan].name}. Upgrade in den Einstellungen.`
+function limitError(c: Context, kind: LimitKind, plan: string, limit: number, catalog: PlanCatalog) {
+  const message = `Monatslimit erreicht: ${limit} ${LIMIT_LABELS[kind]} im Plan ${catalog.plans[plan].name}. Upgrade in den Einstellungen.`
   return mistralError(c, 402, 'limit_reached', message, { kind, plan, limit })
 }
 
@@ -81,6 +92,7 @@ export interface AppOptions {
 
 export function createApp(deps: AppDeps, options: AppOptions = {}): App {
   const app: App = options.basePath ? new Hono<{ Variables: Variables }>().basePath(options.basePath) : new Hono()
+  const catalog = deps.plans ?? DEFAULT_CATALOG
 
   app.use('*', cors({ origin: deps.corsOrigin ?? '*', allowHeaders: ['Authorization', 'Content-Type', 'x-user-id'] }))
 
@@ -122,10 +134,10 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
     }
 
     const month = currentMonth()
-    const [plan, usage] = await Promise.all([planFor(deps.store, user.id), deps.store.getUsage(user.id, month)])
-    const check = checkLimit(plan, usage, kind)
+    const [plan, usage] = await Promise.all([planFor(deps.store, user.id, catalog), deps.store.getUsage(user.id, month)])
+    const check = checkLimit(plan, usage, kind, catalog)
     if (!check.allowed)
-      return limitError(c, kind, plan, check.limit)
+      return limitError(c, kind, plan, check.limit, catalog)
 
     const upstream = await deps.mistralFetch(`${deps.mistralBaseUrl}${path}`, {
       method: 'POST',
@@ -159,14 +171,14 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
   app.get('/me/usage', async (c) => {
     const user = c.get('user')
     const month = currentMonth()
-    const [plan, usage] = await Promise.all([planFor(deps.store, user.id), deps.store.getUsage(user.id, month)])
-    return c.json({ plan, month, usage, limits: PLANS[plan].limits })
+    const [plan, usage] = await Promise.all([planFor(deps.store, user.id, catalog), deps.store.getUsage(user.id, month)])
+    return c.json({ plan, month, usage, limits: catalog.plans[plan].limits, plans: catalog.plans })
   })
 
-  app.post('/billing/checkout', c => (deps.billing ? createCheckout(c, deps.billing, deps.store, c.get('user').id) : notConfigured(c)))
+  app.post('/billing/checkout', c => (deps.billing ? createCheckout(c, deps.billing, deps.store, c.get('user').id, catalog) : notConfigured(c)))
   app.post('/billing/portal', c => (deps.billing ? createPortal(c, deps.billing, deps.store, c.get('user').id) : notConfigured(c)))
   // Stripe ruft ohne Nutzer-Token auf, Authentizität kommt aus der Signatur
-  app.post('/stripe/webhook', c => (deps.billing ? handleWebhook(c, deps.billing, deps.store) : notConfigured(c)))
+  app.post('/stripe/webhook', c => (deps.billing ? handleWebhook(c, deps.billing, deps.store, catalog) : notConfigured(c)))
 
   if (deps.authBypass) {
     // Nur lokal/E2E: Nutzungszähler direkt setzen (Limit-Tests)

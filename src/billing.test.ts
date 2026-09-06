@@ -158,3 +158,32 @@ describe('stripe webhook', () => {
     expect(res.status).toBe(200)
   })
 })
+
+describe('billing with an injected plan catalog', () => {
+  it('creates a checkout for a plan that only exists in the injected catalog', async () => {
+    const store = new MemoryStore()
+    const created: any[] = []
+    const app = createApp({
+      mistralApiKey: 'k',
+      mistralBaseUrl: 'https://mistral.test/v1',
+      verifyToken: async token => (token === 'valid-token' ? { id: 'user-1' } : null),
+      store,
+      authBypass: false,
+      mistralFetch: async () => new Response('{}'),
+      plans: {
+        defaultPlan: 'starter',
+        plans: {
+          starter: { id: 'starter', name: 'Starter', priceChfPerMonth: 0, limits: { ocrPages: 1, chatTokens: 1 } },
+          business: { id: 'business', name: 'Business', priceChfPerMonth: 49, limits: { ocrPages: 9, chatTokens: 9 } },
+        },
+      },
+      billing: { stripe: fakeStripe(created), webhookSecret: WEBHOOK_SECRET, prices: { business: 'price_business' }, appUrl: 'https://app.test' },
+    })
+    const ok = await app.request('/billing/checkout', { method: 'POST', headers: auth, body: JSON.stringify({ plan: 'business' }) })
+    expect(ok.status).toBe(200)
+    expect(created[0].line_items).toEqual([{ price: 'price_business', quantity: 1 }])
+
+    const unknown = await app.request('/billing/checkout', { method: 'POST', headers: auth, body: JSON.stringify({ plan: 'pro' }) })
+    expect(unknown.status).toBe(400)
+  })
+})

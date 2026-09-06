@@ -22,7 +22,19 @@ export interface ServerConfig {
   appUrl: string
   stripeSecretKey: string
   stripeWebhookSecret: string
+  /** Stripe Price-IDs aus STRIPE_PRICE_<PLAN>, Schlüssel = Plan-ID in Kleinbuchstaben. */
   stripePrices: Record<string, string>
+  /** Optional: Geheimnis für Server-zu-Server-Aufrufe mit x-user-id (AI_PROXY_INTERNAL_TOKEN). */
+  internalToken: string
+}
+
+function stripePricesFrom(env: NodeJS.ProcessEnv): Record<string, string> {
+  const prices: Record<string, string> = {}
+  for (const [name, value] of Object.entries(env)) {
+    if (name.startsWith('STRIPE_PRICE_') && value)
+      prices[name.slice('STRIPE_PRICE_'.length).toLowerCase()] = value
+  }
+  return prices
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -60,9 +72,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     appUrl: env.APP_URL || 'http://localhost:5173',
     stripeSecretKey: env.STRIPE_SECRET_KEY || '',
     stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET || '',
-    stripePrices: {
-      basic: env.STRIPE_PRICE_BASIC || '',
-      pro: env.STRIPE_PRICE_PRO || '',
-    },
+    stripePrices: stripePricesFrom(env),
+    internalToken: env.AI_PROXY_INTERNAL_TOKEN || '',
   }
 }

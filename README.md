@@ -9,7 +9,7 @@ Kleiner Server zwischen App und Mistral-API. Er hält den Mistral-Key, zählt de
 | `POST /v1/chat/completions` | Durchleitung an Mistral, zählt `chatTokens`, nur erlaubte Modelle |
 | `POST /v1/ocr` | Durchleitung an Mistral OCR, zählt `ocrPages` |
 | `POST /v1/embeddings` | Durchleitung an Mistral Embed, zählt `total_tokens` als `chatTokens`, nur `mistral-embed` |
-| `GET /me/usage` | Plan, Monat, Verbrauch und Limits des Nutzers |
+| `GET /me/usage` | Plan, Monat, Verbrauch, Limits des Nutzers und der ganze Plan-Katalog (`plans`) |
 | `POST /billing/checkout` | Stripe Checkout für einen bezahlten Plan |
 | `POST /billing/portal` | Stripe Kundenportal |
 | `POST /stripe/webhook` | Setzt den Plan nach Zahlung, Änderung oder Kündigung |
@@ -20,7 +20,8 @@ Bei erreichtem Limit antwortet der Proxy mit 402 im Mistral-Fehlerformat, sodass
 ## Aufbau
 
 - `src/app.ts` erzeugt die Hono-App. Store, Token-Prüfung, `fetch` und Stripe werden injiziert, deshalb ist die Logik ohne Netz testbar.
-- `src/plans.ts` definiert Pläne und Limits, wird auch vom Frontend importiert (`@strainovic/ai-proxy/plans`).
+- `src/plans.ts` definiert den Standard-Katalog (auto-service) und den Typ `PlanCatalog`. Jede App kann ihren eigenen Katalog per `createApp(deps.plans)` bzw. `createEdgeApp(env, { plans })` injizieren; unbekannte Pläne fallen auf `defaultPlan` zurück. Stripe-Preise kommen aus `STRIPE_PRICE_<PLAN>`.
+- **Interner Aufruf:** Mit `AI_PROXY_INTERNAL_TOKEN` (Node) bzw. dem Service-Role-Key (Edge) als Bearer plus Header `x-user-id` dürfen eigene Server-Prozesse im Namen eines Nutzers zählen und aufrufen, etwa eine OCR-Pipeline ohne Nutzer-Session.
 - `src/stores/` Persistenz: `memory` für Tests, `instant` für InstantDB, `supabase` für Postgres (Tabellen `ai_usage`, `ai_subscriptions`, RPC `ai_add_usage`; Schema in dms `supabase/migrations/00007_ai_proxy.sql`).
 - `src/auth/` Token-Prüfung: `instant` für InstantDB-Refresh-Tokens, `supabase` für Supabase-Access-Tokens (JWT der Session).
 - `src/node.ts` Einstieg für Node. Wählt das Backend nach Umgebung: `INSTANT_APP_ID` + `INSTANT_ADMIN_TOKEN` oder `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`.
@@ -54,7 +55,7 @@ Start aus einer App heraus: `node --env-file-if-exists=.env node_modules/@strain
 
 ## In Supabase Edge Functions
 
-Eine Function anlegen, die den Edge-Einstieg importiert, und die `deno.json`-Imports übernehmen. `SUPABASE_URL` und `SUPABASE_SERVICE_ROLE_KEY` setzt Supabase selbst, `MISTRAL_API_KEY` kommt als Secret dazu. Wie dms das einbindet, steht dort in `AGENTS.md`.
+Eine Function anlegen, die `createEdgeApp` aus `src/edge.ts` importiert (gepinnt auf einen Tag, z. B. `https://raw.githubusercontent.com/gstrainovic/ai-proxy/v0.2.0/src/edge.ts`) und mit `Deno.serve(app.fetch)` startet; die `deno.json`-Imports übernehmen. `SUPABASE_URL` und `SUPABASE_SERVICE_ROLE_KEY` setzt Supabase selbst, `MISTRAL_API_KEY` kommt als Secret dazu. Wie dms das einbindet, steht dort in `AGENTS.md`.
 
 ## Docker
 

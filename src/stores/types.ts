@@ -1,8 +1,8 @@
-import type { PlanId } from '../plans.ts'
 import type { Usage } from '../limits.ts'
 
 export interface Subscription {
-  plan: PlanId
+  /** Plan-ID des App-Katalogs (siehe PlanCatalog) */
+  plan: string
   status: 'active' | 'past_due' | 'canceled'
   stripeCustomerId?: string
   stripeSubscriptionId?: string

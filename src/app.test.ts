@@ -4,6 +4,7 @@ import { PLANS } from './plans.ts'
 import { createApp } from './app.ts'
 import { currentMonth } from './limits.ts'
 import { MemoryStore } from './stores/memory.ts'
+import type { PlanCatalog } from './plans.ts'
 
 function mistralResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -144,7 +145,7 @@ describe('usage endpoint', () => {
     await store.addUsage('user-1', currentMonth(), { ocrPages: 3, chatTokens: 4000 })
     const res = await app.request('/me/usage', { headers: { Authorization: 'Bearer valid-token' } })
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({
+    expect(await res.json()).toMatchObject({
       plan: 'free',
       month: currentMonth(),
       usage: { ocrPages: 3, chatTokens: 4000 },
@@ -249,5 +250,72 @@ describe('embeddings proxy', () => {
     })
     expect(res.status).toBe(402)
     expect(calls).toHaveLength(0)
+  })
+})
+
+const dmsCatalog: PlanCatalog = {
+  defaultPlan: 'starter',
+  plans: {
+    starter: { id: 'starter', name: 'Starter', priceChfPerMonth: 0, limits: { ocrPages: 3, chatTokens: 1000 } },
+    pro: { id: 'pro', name: 'Pro', priceChfPerMonth: 19, limits: { ocrPages: 2000, chatTokens: 10_000_000 } },
+  },
+}
+
+describe('injected plan catalog', () => {
+  it('reports the catalog default plan and its limits in /me/usage and includes all plans', async () => {
+    const { app } = setup({ plans: dmsCatalog })
+    const res = await app.request('/me/usage', { headers: auth })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.plan).toBe('starter')
+    expect(body.limits).toEqual({ ocrPages: 3, chatTokens: 1000 })
+    expect(Object.keys(body.plans)).toEqual(['starter', 'pro'])
+    expect(body.plans.pro.priceChfPerMonth).toBe(19)
+  })
+
+  it('enforces the catalog limits and names the catalog plan in the error', async () => {
+    const { app, store, calls } = setup({ plans: dmsCatalog })
+    await store.addUsage('user-1', currentMonth(), { ocrPages: 3, chatTokens: 0 })
+    const res = await app.request('/v1/ocr', { method: 'POST', headers: auth, body: JSON.stringify({ model: 'mistral-ocr-latest' }) })
+    expect(res.status).toBe(402)
+    const body = await res.json()
+    expect(body.message).toContain('Starter')
+    expect(body.error).toMatchObject({ code: 'limit_reached', limit: 3, plan: 'starter' })
+    expect(calls).toHaveLength(0)
+  })
+
+  it('falls back to the catalog default when the stored plan is unknown', async () => {
+    const { app, store } = setup({ plans: dmsCatalog })
+    await store.setSubscription('user-1', { plan: 'basic', status: 'active' })
+    const res = await app.request('/me/usage', { headers: auth })
+    expect((await res.json()).plan).toBe('starter')
+  })
+})
+
+describe('internal token (server-to-server calls on behalf of a user)', () => {
+  const internal = { 'Authorization': 'Bearer internal-secret', 'content-type': 'application/json' }
+
+  it('accepts the internal token together with x-user-id and counts usage for that user', async () => {
+    const { app, store } = setup({
+      internalToken: 'internal-secret',
+      mistralFetch: async () => mistralResponse({ usage_info: { pages_processed: 4 } }),
+    })
+    const res = await app.request('/v1/ocr', { method: 'POST', headers: { ...internal, 'x-user-id': 'pipeline-user' }, body: '{}' })
+    expect(res.status).toBe(200)
+    expect((await store.getUsage('pipeline-user', currentMonth())).ocrPages).toBe(4)
+  })
+
+  it('rejects the internal token without x-user-id and rejects a wrong internal token', async () => {
+    const { app } = setup({ internalToken: 'internal-secret' })
+    const noUser = await app.request('/me/usage', { headers: internal })
+    expect(noUser.status).toBe(401)
+    const wrong = await app.request('/me/usage', { headers: { 'Authorization': 'Bearer other', 'x-user-id': 'u' } })
+    expect(wrong.status).toBe(401)
+  })
+
+  it('ignores x-user-id when no internal token is configured', async () => {
+    const { app } = setup()
+    const res = await app.request('/me/usage', { headers: { 'Authorization': 'Bearer internal-secret', 'x-user-id': 'u' } })
+    expect(res.status).toBe(401)
   })
 })

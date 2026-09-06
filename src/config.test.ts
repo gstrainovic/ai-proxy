@@ -24,3 +24,15 @@ describe('loadConfig backend selection', () => {
     expect(() => loadConfig({ SUPABASE_URL: 'u', SUPABASE_SERVICE_ROLE_KEY: 'k' })).toThrow(/MISTRAL_API_KEY/)
   })
 })
+
+describe('loadConfig stripe prices', () => {
+  it('collects every STRIPE_PRICE_<PLAN> variable into a map keyed by lowercased plan id', () => {
+    const config = loadConfig({ ...base, SUPABASE_URL: 'u', SUPABASE_SERVICE_ROLE_KEY: 'k', STRIPE_PRICE_PRO: 'price_1', STRIPE_PRICE_BUSINESS: 'price_2', STRIPE_PRICE_EMPTY: '' })
+    expect(config.stripePrices).toEqual({ pro: 'price_1', business: 'price_2' })
+  })
+
+  it('reads the optional internal token', () => {
+    const config = loadConfig({ ...base, SUPABASE_URL: 'u', SUPABASE_SERVICE_ROLE_KEY: 'k', AI_PROXY_INTERNAL_TOKEN: 'secret' })
+    expect(config.internalToken).toBe('secret')
+  })
+})

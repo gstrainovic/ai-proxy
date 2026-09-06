@@ -1,21 +1,21 @@
 import type { Context } from 'hono'
 import type Stripe from 'stripe'
-import type { PlanId } from './plans.ts'
+import type { PlanCatalog } from './plans.ts'
 import type { Store, Subscription } from './stores/types.ts'
-import { isPlanId, PLANS } from './plans.ts'
+import { DEFAULT_CATALOG, isPlanIn } from './plans.ts'
 
 export interface BillingDeps {
   stripe: Stripe
   webhookSecret: string
-  /** Stripe Price-IDs je bezahltem Plan */
-  prices: Partial<Record<PlanId, string>>
+  /** Stripe Price-IDs je bezahltem Plan (Schlüssel = Plan-ID des Katalogs) */
+  prices: Partial<Record<string, string>>
   appUrl: string
 }
 
-function planForPrice(prices: BillingDeps['prices'], priceId: string | undefined): PlanId | null {
+function planForPrice(prices: BillingDeps['prices'], priceId: string | undefined): string | null {
   for (const [plan, id] of Object.entries(prices)) {
     if (id && id === priceId)
-      return plan as PlanId
+      return plan
   }
   return null
 }
@@ -32,14 +32,14 @@ export function notConfigured(c: Context) {
   return c.json({ error: { code: 'billing_not_configured', message: 'Zahlung ist noch nicht konfiguriert.' } }, 501)
 }
 
-export async function createCheckout(c: Context, deps: BillingDeps, store: Store, userId: string) {
+export async function createCheckout(c: Context, deps: BillingDeps, store: Store, userId: string, catalog: PlanCatalog = DEFAULT_CATALOG) {
   const body = await c.req.json<{ plan?: string }>().catch(() => ({} as { plan?: string }))
   const plan = body.plan
-  if (!isPlanId(plan) || PLANS[plan].priceChfPerMonth === 0)
+  if (!isPlanIn(catalog, plan) || catalog.plans[plan].priceChfPerMonth === 0)
     return c.json({ error: { code: 'invalid_plan', message: 'Ungültiger Plan.' } }, 400)
   const price = deps.prices[plan]
   if (!price)
-    return c.json({ error: { code: 'plan_not_configured', message: `Für den Plan ${PLANS[plan].name} ist kein Stripe-Preis hinterlegt.` } }, 501)
+    return c.json({ error: { code: 'plan_not_configured', message: `Für den Plan ${catalog.plans[plan].name} ist kein Stripe-Preis hinterlegt.` } }, 501)
 
   const existing = await store.getSubscription(userId)
   const session = await deps.stripe.checkout.sessions.create({
@@ -65,7 +65,7 @@ export async function createPortal(c: Context, deps: BillingDeps, store: Store, 
   return c.json({ url: session.url })
 }
 
-export async function handleWebhook(c: Context, deps: BillingDeps, store: Store) {
+export async function handleWebhook(c: Context, deps: BillingDeps, store: Store, catalog: PlanCatalog = DEFAULT_CATALOG) {
   const signature = c.req.header('stripe-signature') ?? ''
   const payload = await c.req.text()
   let event: Stripe.Event
@@ -80,7 +80,7 @@ export async function handleWebhook(c: Context, deps: BillingDeps, store: Store)
     const session = event.data.object as Stripe.Checkout.Session
     const userId = session.client_reference_id ?? session.metadata?.userId
     const plan = session.metadata?.plan
-    if (userId && isPlanId(plan)) {
+    if (userId && isPlanIn(catalog, plan)) {
       await store.setSubscription(userId, {
         plan,
         status: 'active',
@@ -96,7 +96,7 @@ export async function handleWebhook(c: Context, deps: BillingDeps, store: Store)
     if (userId) {
       const item = sub.items?.data?.[0]
       const status = event.type === 'customer.subscription.deleted' ? 'canceled' : mapStatus(sub.status)
-      const plan = status === 'canceled' ? 'free' : (planForPrice(deps.prices, item?.price?.id) ?? 'free')
+      const plan = status === 'canceled' ? catalog.defaultPlan : (planForPrice(deps.prices, item?.price?.id) ?? catalog.defaultPlan)
       const existing = await store.getSubscription(userId)
       await store.setSubscription(userId, {
         plan,

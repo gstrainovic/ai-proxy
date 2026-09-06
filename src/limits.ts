@@ -1,5 +1,5 @@
-import type { LimitKind, PlanId } from './plans.ts'
-import { isPlanId, PLANS } from './plans.ts'
+import type { LimitKind, PlanCatalog } from './plans.ts'
+import { DEFAULT_CATALOG, isPlanIn } from './plans.ts'
 
 export interface Usage {
   ocrPages: number
@@ -10,20 +10,21 @@ export interface LimitResult {
   allowed: boolean
   remaining: number
   limit: number
-  plan: PlanId
+  plan: string
 }
 
 export function emptyUsage(): Usage {
   return { ocrPages: 0, chatTokens: 0 }
 }
 
-export function resolvePlan(planId: unknown): PlanId {
-  return isPlanId(planId) ? planId : 'free'
+/** Unbekannte oder fehlende Pläne fallen auf den Standardplan des Katalogs zurück. */
+export function resolvePlan(planId: unknown, catalog: PlanCatalog = DEFAULT_CATALOG): string {
+  return isPlanIn(catalog, planId) ? planId : catalog.defaultPlan
 }
 
-export function checkLimit(planId: unknown, usage: Usage, kind: LimitKind): LimitResult {
-  const plan = resolvePlan(planId)
-  const limit = PLANS[plan].limits[kind]
+export function checkLimit(planId: unknown, usage: Usage, kind: LimitKind, catalog: PlanCatalog = DEFAULT_CATALOG): LimitResult {
+  const plan = resolvePlan(planId, catalog)
+  const limit = catalog.plans[plan].limits[kind]
   const remaining = Math.max(0, limit - usage[kind])
   return { allowed: remaining > 0, remaining, limit, plan }
 }

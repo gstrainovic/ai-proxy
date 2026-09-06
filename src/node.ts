@@ -33,7 +33,7 @@ const billing = config.stripeSecretKey && config.stripeWebhookSecret
   ? {
       stripe: new Stripe(config.stripeSecretKey),
       webhookSecret: config.stripeWebhookSecret,
-      prices: { basic: config.stripePrices.basic || undefined, pro: config.stripePrices.pro || undefined },
+      prices: config.stripePrices,
       appUrl: config.appUrl,
     }
   : null
@@ -47,6 +47,7 @@ const app = createApp({
   mistralFetch: fetch,
   corsOrigin: config.corsOrigin,
   billing,
+  internalToken: config.internalToken || undefined,
 })
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {
