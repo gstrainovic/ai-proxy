@@ -63,6 +63,7 @@ export class InstantStore implements Store {
     return {
       plan: row.plan,
       status: row.status,
+      trialStartedAt: row.trialStartedAt ?? undefined,
       stripeCustomerId: row.stripeCustomerId ?? undefined,
       stripeSubscriptionId: row.stripeSubscriptionId ?? undefined,
       currentPeriodEnd: row.currentPeriodEnd ?? undefined,
@@ -76,6 +77,7 @@ export class InstantStore implements Store {
       userId,
       plan: sub.plan,
       status: sub.status,
+      trialStartedAt: sub.trialStartedAt ?? null,
       stripeCustomerId: sub.stripeCustomerId ?? null,
       stripeSubscriptionId: sub.stripeSubscriptionId ?? null,
       currentPeriodEnd: sub.currentPeriodEnd ?? null,

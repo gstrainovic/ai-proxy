@@ -140,7 +140,7 @@ describe('ocr proxy', () => {
 })
 
 describe('usage endpoint', () => {
-  it('returns plan, limits and current usage', async () => {
+  it('returns plan, limits, current usage and the running trial', async () => {
     const { app, store } = setup()
     await store.addUsage('user-1', currentMonth(), { ocrPages: 3, chatTokens: 4000 })
     const res = await app.request('/me/usage', { headers: { Authorization: 'Bearer valid-token' } })
@@ -150,7 +150,26 @@ describe('usage endpoint', () => {
       month: currentMonth(),
       usage: { ocrPages: 3, chatTokens: 4000 },
       limits: PLANS.free.limits,
+      trial: { active: true, daysLeft: 30 },
     })
+    // der erste Aufruf hat die Testzeit begonnen
+    expect(await store.getSubscription('user-1')).toMatchObject({ status: 'trial' })
+  })
+
+  it('blocks scan and chat with 402 once the trial is over, no Mistral call', async () => {
+    const { app, store, calls } = setup()
+    const started = new Date(Date.now() - 31 * 86_400_000).toISOString()
+    await store.setSubscription('user-1', { plan: 'free', status: 'trial', trialStartedAt: started })
+    const res = await app.request('/v1/ocr', { method: 'POST', headers: { 'Authorization': 'Bearer valid-token', 'Content-Type': 'application/json' }, body: '{}' })
+    expect(res.status).toBe(402)
+    const body = await res.json()
+    expect(body.error.code).toBe('trial_expired')
+    expect(body.message).toContain('Testzeit vorbei')
+    expect(body.message).toContain('36 CHF')
+    expect(calls.length).toBe(0)
+    // die Nutzungsabfrage bleibt frei und meldet die abgelaufene Testzeit
+    const usage = await app.request('/me/usage', { headers: { Authorization: 'Bearer valid-token' } })
+    expect(await usage.json()).toMatchObject({ trial: { active: false, daysLeft: 0 } })
   })
 
   it('has a health endpoint', async () => {

@@ -1,13 +1,14 @@
 import type { Context } from 'hono'
 import type { LimitKind, PlanCatalog } from './plans.ts'
 import type { BillingDeps } from './billing.ts'
-import type { Store } from './stores/types.ts'
+import type { Store, Subscription } from './stores/types.ts'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { DEFAULT_CATALOG, LIMIT_LABELS } from './plans.ts'
+import { DEFAULT_CATALOG, LIMIT_LABELS, yearlyPriceChf } from './plans.ts'
 import { createCheckout, createPortal, handleWebhook, notConfigured } from './billing.ts'
 import { checkLimit, currentMonth, resolvePlan } from './limits.ts'
 import { checkBurst, createBurstState } from './rate-limit.ts'
+import { startTrial, trialState } from './trial.ts'
 
 export interface AuthUser {
   id: string
@@ -63,6 +64,22 @@ async function resolveUser(c: Context, deps: AppDeps): Promise<AuthUser | null> 
 async function planFor(store: Store, userId: string, catalog: PlanCatalog): Promise<string> {
   const sub = await store.getSubscription(userId)
   return resolvePlan(sub && sub.status === 'active' ? sub.plan : undefined, catalog)
+}
+
+/** Ohne Abo beginnt beim ersten Aufruf die Testzeit; ein bestehender Eintrag bleibt, wie er ist */
+async function subscriptionWithTrial(store: Store, userId: string): Promise<Subscription> {
+  const sub = await store.getSubscription(userId)
+  if (sub)
+    return sub
+  const trial = startTrial()
+  await store.setSubscription(userId, trial)
+  return trial
+}
+
+function trialExpiredError(c: Context, catalog: PlanCatalog) {
+  const first = catalog.plans.klein ? yearlyPriceChf(1) : undefined
+  const price = first ? ` Wartungsheft kostet ${first} CHF im Jahr für ein Fahrzeug, jedes weitere ${yearlyPriceChf(2) - first} CHF.` : ''
+  return mistralError(c, 402, 'trial_expired', `Testzeit vorbei: KI-Scan und Chat brauchen ein Abo.${price} Abo in den Einstellungen.`)
 }
 
 /** Erlaubte Modelle im Abo-Modus (Kostenkontrolle): Chat nur Small, Embeddings nur mistral-embed, OCR nur das OCR-Modell. */
@@ -143,6 +160,10 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
     }
 
     const month = currentMonth()
+    const sub = await subscriptionWithTrial(deps.store, user.id)
+    const trial = trialState(sub)
+    if (trial && !trial.active)
+      return trialExpiredError(c, catalog)
     const [plan, usage] = await Promise.all([planFor(deps.store, user.id, catalog), deps.store.getUsage(user.id, month)])
     const check = checkLimit(plan, usage, kind, catalog)
     if (!check.allowed)
@@ -180,8 +201,9 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
   app.get('/me/usage', async (c) => {
     const user = c.get('user')
     const month = currentMonth()
+    const sub = await subscriptionWithTrial(deps.store, user.id)
     const [plan, usage] = await Promise.all([planFor(deps.store, user.id, catalog), deps.store.getUsage(user.id, month)])
-    return c.json({ plan, month, usage, limits: catalog.plans[plan].limits, plans: catalog.plans })
+    return c.json({ plan, month, usage, limits: catalog.plans[plan].limits, plans: catalog.plans, trial: trialState(sub) })
   })
 
   app.post('/billing/checkout', c => (deps.billing ? createCheckout(c, deps.billing, deps.store, c.get('user').id, catalog) : notConfigured(c)))

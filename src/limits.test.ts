@@ -36,7 +36,8 @@ describe('fahrzeug-staffel', () => {
 
   it('wählt den kleinsten Plan, der die Fahrzeuge abdeckt', async () => {
     const { planForVehicles } = await import('./plans.ts')
-    expect(planForVehicles(1).id).toBe('free')
+    // die Testzeit ist kein Kaufplan: ab dem ersten Fahrzeug «klein»
+    expect(planForVehicles(1).id).toBe('klein')
     expect(planForVehicles(3).id).toBe('klein')
     expect(planForVehicles(4).id).toBe('mittel')
     expect(planForVehicles(10).id).toBe('mittel')

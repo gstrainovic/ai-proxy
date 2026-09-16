@@ -3,7 +3,9 @@ import type { Usage } from '../limits.ts'
 export interface Subscription {
   /** Plan-ID des App-Katalogs (siehe PlanCatalog) */
   plan: string
-  status: 'active' | 'past_due' | 'canceled'
+  status: 'active' | 'past_due' | 'canceled' | 'trial'
+  /** Beginn der Testzeit (ISO), gesetzt beim ersten Aufruf ohne Abo */
+  trialStartedAt?: string
   stripeCustomerId?: string
   stripeSubscriptionId?: string
   currentPeriodEnd?: number

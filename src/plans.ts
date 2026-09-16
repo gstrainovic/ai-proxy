@@ -40,12 +40,13 @@ export interface PlanCatalog {
  * des Marktes (Fleethouse 2,90 €, Fleetio ab 4 USD, CARMADA 6 € plus Grundgebühr je Fahrzeug und Monat).
  */
 export const PLANS: Record<PlanId, Plan> = {
+  // Kein Gratis-Plan, sondern die Testzeit (trial.ts): 30 Tage mit allem, bis drei Fahrzeuge; danach 402
   free: {
     id: 'free',
-    name: 'Zum Ausprobieren',
+    name: 'Testzeit',
     priceChfPerMonth: 0,
-    maxVehicles: 1,
-    limits: { ocrPages: 10, chatTokens: 200_000 },
+    maxVehicles: 3,
+    limits: { ocrPages: 100, chatTokens: 1_500_000 },
   },
   klein: {
     id: 'klein',
@@ -77,9 +78,11 @@ export function yearlyPriceChf(vehicles: number): number {
   return FIRST_VEHICLE_CHF + Math.max(0, Math.ceil(vehicles) - 1) * FURTHER_VEHICLE_CHF
 }
 
-/** Kleinster Plan, der so viele Fahrzeuge abdeckt; mehr als der grösste Plan gibt es auf Anfrage */
+/** Kleinster bezahlter Plan, der so viele Fahrzeuge abdeckt; mehr als der grösste Plan gibt es auf Anfrage */
 export function planForVehicles(vehicles: number, catalog: PlanCatalog = DEFAULT_CATALOG): Plan {
-  const plans = Object.values(catalog.plans).sort((a, b) => (a.maxVehicles ?? Infinity) - (b.maxVehicles ?? Infinity))
+  const plans = Object.values(catalog.plans)
+    .filter(p => p.priceChfPerMonth > 0)
+    .sort((a, b) => (a.maxVehicles ?? Infinity) - (b.maxVehicles ?? Infinity))
   return plans.find(p => vehicles <= (p.maxVehicles ?? Infinity)) ?? plans[plans.length - 1]!
 }
 
