@@ -11,6 +11,8 @@ export const BURST_WINDOW_MS = 60_000
 
 export interface BurstState {
   hits: Map<string, number[]>
+  /** Schwelle je Nutzer und Fenster; Betrieb nimmt BURST_LIMIT, E2E-Läufe setzen sie hoch */
+  limit: number
 }
 
 export interface BurstResult {
@@ -18,14 +20,14 @@ export interface BurstResult {
   retryAfterSeconds: number
 }
 
-export function createBurstState(): BurstState {
-  return { hits: new Map() }
+export function createBurstState(limit: number = BURST_LIMIT): BurstState {
+  return { hits: new Map(), limit }
 }
 
 export function checkBurst(state: BurstState, userId: string, now: number = Date.now()): BurstResult {
   const since = now - BURST_WINDOW_MS
   const recent = (state.hits.get(userId) ?? []).filter(t => t > since)
-  if (recent.length >= BURST_LIMIT) {
+  if (recent.length >= state.limit) {
     state.hits.set(userId, recent)
     return { allowed: false, retryAfterSeconds: Math.ceil(BURST_WINDOW_MS / 1000) }
   }

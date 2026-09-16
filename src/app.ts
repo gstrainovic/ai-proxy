@@ -22,6 +22,8 @@ export interface AppDeps {
   store: Store
   /** Nur lokal/E2E: User-ID aus Header `x-user-id` ohne Token akzeptieren. */
   authBypass: boolean
+  /** Fair-Use-Bremse: Anfragen pro Nutzer und Minute; Default BURST_LIMIT. */
+  burstLimit?: number
   mistralFetch: typeof fetch
   corsOrigin?: string
   /** Stripe-Anbindung; null/undefined = Zahlung nicht konfiguriert (Endpoints antworten 501). */
@@ -112,7 +114,7 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
   const app: App = options.basePath ? new Hono<{ Variables: Variables }>().basePath(options.basePath) : new Hono()
   const catalog = deps.plans ?? DEFAULT_CATALOG
   // Fair Use: das Monatskontingent ist grosszügig, gegen Skripte hilft nur ein Kurzzeit-Limit
-  const burst = createBurstState()
+  const burst = createBurstState(deps.burstLimit)
 
   app.use('*', cors({ origin: deps.corsOrigin ?? '*', allowHeaders: ['Authorization', 'Content-Type', 'x-user-id'] }))
 

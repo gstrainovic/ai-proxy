@@ -40,12 +40,12 @@ export interface PlanCatalog {
  * des Marktes (Fleethouse 2,90 €, Fleetio ab 4 USD, CARMADA 6 € plus Grundgebühr je Fahrzeug und Monat).
  */
 export const PLANS: Record<PlanId, Plan> = {
-  // Kein Gratis-Plan, sondern die Testzeit (trial.ts): 30 Tage mit allem, bis drei Fahrzeuge; danach 402
+  // Kein Gratis-Plan, sondern die Testzeit (trial.ts): 30 Tage mit allem und ohne Fahrzeuggrenze, damit auch ein
+  // Betrieb seine ganze Flotte testen kann; danach 402
   free: {
     id: 'free',
     name: 'Testzeit',
     priceChfPerMonth: 0,
-    maxVehicles: 3,
     limits: { ocrPages: 100, chatTokens: 1_500_000 },
   },
   klein: {

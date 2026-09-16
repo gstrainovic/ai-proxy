@@ -1,4 +1,5 @@
 import process from 'node:process'
+import { BURST_LIMIT } from './rate-limit.ts'
 
 export type Backend = 'instant' | 'supabase'
 
@@ -18,6 +19,8 @@ export interface ServerConfig {
   instantAdminToken: string
   supabase: SupabaseConfig | null
   authBypass: boolean
+  /** Fair-Use-Bremse: Anfragen pro Nutzer und Minute (AI_PROXY_BURST_LIMIT, Default 20). */
+  burstLimit: number
   corsOrigin: string
   appUrl: string
   stripeSecretKey: string
@@ -68,6 +71,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       ? { url: required(env, 'SUPABASE_URL'), serviceRoleKey: required(env, 'SUPABASE_SERVICE_ROLE_KEY') }
       : null,
     authBypass,
+    burstLimit: Number(env.AI_PROXY_BURST_LIMIT || BURST_LIMIT),
     corsOrigin: env.CORS_ORIGIN || '*',
     appUrl: env.APP_URL || 'http://localhost:5173',
     stripeSecretKey: env.STRIPE_SECRET_KEY || '',

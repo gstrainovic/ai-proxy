@@ -36,3 +36,11 @@ describe('loadConfig stripe prices', () => {
     expect(config.internalToken).toBe('secret')
   })
 })
+
+describe('loadConfig fair use', () => {
+  it('liest AI_PROXY_BURST_LIMIT, sonst 20 Anfragen pro Minute', () => {
+    const env = { ...base, SUPABASE_URL: 'u', SUPABASE_SERVICE_ROLE_KEY: 'k' }
+    expect(loadConfig(env).burstLimit).toBe(20)
+    expect(loadConfig({ ...env, AI_PROXY_BURST_LIMIT: '500' }).burstLimit).toBe(500)
+  })
+})

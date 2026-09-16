@@ -44,6 +44,7 @@ const app = createApp({
   verifyToken,
   store,
   authBypass: config.authBypass,
+  burstLimit: config.burstLimit,
   mistralFetch: fetch,
   corsOrigin: config.corsOrigin,
   billing,

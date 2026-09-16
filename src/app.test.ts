@@ -338,3 +338,16 @@ describe('internal token (server-to-server calls on behalf of a user)', () => {
     expect(res.status).toBe(401)
   })
 })
+
+describe('fair use', () => {
+  it('bremst ab der Schwelle mit 429 und Retry-After', async () => {
+    const { app, calls } = setup({ burstLimit: 2 })
+    const body = JSON.stringify({ model: 'mistral-small-latest', messages: [] })
+    for (let i = 0; i < 2; i++)
+      expect((await app.request('/v1/chat/completions', { method: 'POST', body, headers: auth })).status).toBe(200)
+    const res = await app.request('/v1/chat/completions', { method: 'POST', body, headers: auth })
+    expect(res.status).toBe(429)
+    expect(res.headers.get('Retry-After')).toBe('60')
+    expect(calls).toHaveLength(2)
+  })
+})

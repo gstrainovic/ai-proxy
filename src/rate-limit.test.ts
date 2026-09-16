@@ -31,3 +31,12 @@ describe('checkBurst', () => {
     expect(checkBurst(state, 'user-1', 1000 + BURST_WINDOW_MS + 1).allowed).toBe(true)
   })
 })
+
+describe('checkBurst mit eigener Schwelle', () => {
+  it('nimmt die Schwelle aus dem Zustand, z. B. hoch für E2E-Läufe', () => {
+    const state = createBurstState(3)
+    for (let i = 0; i < 3; i++)
+      expect(checkBurst(state, 'user-1', 1000).allowed).toBe(true)
+    expect(checkBurst(state, 'user-1', 1000).allowed).toBe(false)
+  })
+})
