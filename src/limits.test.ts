@@ -14,6 +14,37 @@ describe('plans', () => {
   })
 })
 
+describe('fahrzeug-staffel', () => {
+  it('rechnet 36 CHF im Jahr für bis zu drei Fahrzeuge, danach 30 CHF je Fahrzeug', async () => {
+    const { yearlyPriceChf } = await import('./plans.ts')
+    expect(yearlyPriceChf(1)).toBe(36)
+    expect(yearlyPriceChf(3)).toBe(36)
+    expect(yearlyPriceChf(4)).toBe(66)
+    expect(yearlyPriceChf(10)).toBe(246)
+    expect(yearlyPriceChf(25)).toBe(696)
+  })
+
+  it('wählt den kleinsten Plan, der die Fahrzeuge abdeckt', async () => {
+    const { planForVehicles } = await import('./plans.ts')
+    expect(planForVehicles(1).id).toBe('free')
+    expect(planForVehicles(3).id).toBe('klein')
+    expect(planForVehicles(4).id).toBe('mittel')
+    expect(planForVehicles(10).id).toBe('mittel')
+    expect(planForVehicles(11).id).toBe('gross')
+    // mehr als der grösste Plan: grösster Plan, der Rest läuft über eine Anfrage
+    expect(planForVehicles(40).id).toBe('gross')
+  })
+
+  it('gibt jedem Plan Scans nach Fahrzeugen, mindestens das Konto-Minimum', async () => {
+    const { PLANS, OCR_PAGES_PER_VEHICLE, MIN_OCR_PAGES } = await import('./plans.ts')
+    for (const plan of Object.values(PLANS)) {
+      if (plan.id === 'free')
+        continue
+      expect(plan.limits.ocrPages).toBe(Math.max(MIN_OCR_PAGES, (plan.maxVehicles ?? 0) * OCR_PAGES_PER_VEHICLE))
+    }
+  })
+})
+
 describe('checkLimit', () => {
   it('allows a request while usage is below the plan limit', () => {
     const usage = { ...emptyUsage(), ocrPages: 4 }

@@ -132,7 +132,7 @@ describe('ocr proxy', () => {
 
   it('uses the higher limits of a paid plan', async () => {
     const { app, store } = setup()
-    await store.setSubscription('user-1', { plan: 'pro', status: 'active' })
+    await store.setSubscription('user-1', { plan: 'mittel', status: 'active' })
     await store.addUsage('user-1', currentMonth(), { ocrPages: PLANS.free.limits.ocrPages + 1, chatTokens: 0 })
     const res = await app.request('/v1/ocr', { method: 'POST', headers: auth, body: '{}' })
     expect(res.status).toBe(200)
@@ -286,7 +286,7 @@ describe('injected plan catalog', () => {
 
   it('falls back to the catalog default when the stored plan is unknown', async () => {
     const { app, store } = setup({ plans: dmsCatalog })
-    await store.setSubscription('user-1', { plan: 'basic', status: 'active' })
+    await store.setSubscription('user-1', { plan: 'klein', status: 'active' })
     const res = await app.request('/me/usage', { headers: auth })
     expect((await res.json()).plan).toBe('starter')
   })
