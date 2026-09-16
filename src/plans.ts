@@ -19,9 +19,13 @@ export interface Plan {
   limits: Record<LimitKind, number>
 }
 
-/** Scans pro Fahrzeug und Monat; darunter deckt kein Plan weniger als MIN_OCR_PAGES ab */
-export const OCR_PAGES_PER_VEHICLE = 5
-export const MIN_OCR_PAGES = 15
+/**
+ * Fair Use statt knappem Kontingent: Ein Scan kostet rund 0,0015 CHF, das Kontingent ist darum keine Kostenbremse,
+ * sondern nur ein Riegel gegen Skripte. Die Schwelle liegt weit über jedem echten Gebrauch (50 Scans pro Fahrzeug
+ * und Monat, mindestens 150 pro Konto). Gegen Stossbetrieb wirkt zusätzlich das Kurzzeit-Limit in rate-limit.ts.
+ */
+export const OCR_PAGES_PER_VEHICLE = 50
+export const MIN_OCR_PAGES = 150
 
 /** Plan-Katalog einer App: alle Pläne plus der Plan für Nutzer ohne Abo. */
 export interface PlanCatalog {
@@ -40,28 +44,28 @@ export const PLANS: Record<PlanId, Plan> = {
     name: 'Zum Ausprobieren',
     priceChfPerMonth: 0,
     maxVehicles: 1,
-    limits: { ocrPages: 5, chatTokens: 100_000 },
+    limits: { ocrPages: 10, chatTokens: 200_000 },
   },
   klein: {
     id: 'klein',
     name: 'Bis 3 Fahrzeuge',
     priceChfPerMonth: 3,
     maxVehicles: 3,
-    limits: { ocrPages: 15, chatTokens: 1_000_000 },
+    limits: { ocrPages: 150, chatTokens: 2_000_000 },
   },
   mittel: {
     id: 'mittel',
     name: 'Bis 10 Fahrzeuge',
     priceChfPerMonth: 20.5,
     maxVehicles: 10,
-    limits: { ocrPages: 50, chatTokens: 3_000_000 },
+    limits: { ocrPages: 500, chatTokens: 5_000_000 },
   },
   gross: {
     id: 'gross',
     name: 'Bis 25 Fahrzeuge',
     priceChfPerMonth: 58,
     maxVehicles: 25,
-    limits: { ocrPages: 125, chatTokens: 8_000_000 },
+    limits: { ocrPages: 1250, chatTokens: 12_000_000 },
   },
 }
 

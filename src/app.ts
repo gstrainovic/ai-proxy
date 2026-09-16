@@ -7,6 +7,7 @@ import { cors } from 'hono/cors'
 import { DEFAULT_CATALOG, LIMIT_LABELS } from './plans.ts'
 import { createCheckout, createPortal, handleWebhook, notConfigured } from './billing.ts'
 import { checkLimit, currentMonth, resolvePlan } from './limits.ts'
+import { checkBurst, createBurstState } from './rate-limit.ts'
 
 export interface AuthUser {
   id: string
@@ -69,7 +70,7 @@ export const ALLOWED_CHAT_MODELS = new Set(['mistral-small-latest'])
 export const ALLOWED_EMBED_MODELS = new Set(['mistral-embed'])
 
 /** Fehlerformat wie Mistral (`object: 'error'`, `message`), damit das AI SDK unsere Meldung durchreicht. */
-function mistralError(c: Context, status: 400 | 402, type: string, message: string, extra: Record<string, unknown> = {}) {
+function mistralError(c: Context, status: 400 | 402 | 429, type: string, message: string, extra: Record<string, unknown> = {}) {
   return c.json({
     object: 'error',
     message,
@@ -93,6 +94,8 @@ export interface AppOptions {
 export function createApp(deps: AppDeps, options: AppOptions = {}): App {
   const app: App = options.basePath ? new Hono<{ Variables: Variables }>().basePath(options.basePath) : new Hono()
   const catalog = deps.plans ?? DEFAULT_CATALOG
+  // Fair Use: das Monatskontingent ist grosszügig, gegen Skripte hilft nur ein Kurzzeit-Limit
+  const burst = createBurstState()
 
   app.use('*', cors({ origin: deps.corsOrigin ?? '*', allowHeaders: ['Authorization', 'Content-Type', 'x-user-id'] }))
 
@@ -131,6 +134,12 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
       catch {}
       if (model && !allowedModels.has(model))
         return mistralError(c, 400, 'model_not_allowed', `Modell ${model} ist im Abo nicht verfügbar.`)
+    }
+
+    const rate = checkBurst(burst, user.id)
+    if (!rate.allowed) {
+      c.header('Retry-After', String(rate.retryAfterSeconds))
+      return mistralError(c, 429, 'rate_limited', `Zu viele Anfragen. Bitte ${rate.retryAfterSeconds} Sekunden warten.`, { retryAfterSeconds: rate.retryAfterSeconds })
     }
 
     const month = currentMonth()
