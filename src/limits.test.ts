@@ -15,13 +15,23 @@ describe('plans', () => {
 })
 
 describe('fahrzeug-staffel', () => {
-  it('rechnet 36 CHF im Jahr für bis zu drei Fahrzeuge, danach 30 CHF je Fahrzeug', async () => {
+  it('rechnet 36 CHF im Jahr für das erste Fahrzeug, danach 24 CHF je weiteres (fallend, nicht steigend)', async () => {
     const { yearlyPriceChf } = await import('./plans.ts')
     expect(yearlyPriceChf(1)).toBe(36)
-    expect(yearlyPriceChf(3)).toBe(36)
-    expect(yearlyPriceChf(4)).toBe(66)
-    expect(yearlyPriceChf(10)).toBe(246)
-    expect(yearlyPriceChf(25)).toBe(696)
+    expect(yearlyPriceChf(3)).toBe(84)
+    expect(yearlyPriceChf(10)).toBe(252)
+    expect(yearlyPriceChf(25)).toBe(612)
+    // der Durchschnitt pro Fahrzeug sinkt mit jedem weiteren
+    expect(yearlyPriceChf(10) / 10).toBeLessThan(yearlyPriceChf(3) / 3)
+  })
+
+  it('leitet den Monatspreis der Pläne aus der Jahresstaffel ab', async () => {
+    const { PLANS, yearlyPriceChf } = await import('./plans.ts')
+    for (const plan of Object.values(PLANS)) {
+      if (plan.id === 'free')
+        continue
+      expect(plan.priceChfPerMonth).toBeCloseTo(yearlyPriceChf(plan.maxVehicles!) / 12, 2)
+    }
   })
 
   it('wählt den kleinsten Plan, der die Fahrzeuge abdeckt', async () => {

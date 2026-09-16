@@ -34,9 +34,10 @@ export interface PlanCatalog {
 }
 
 /**
- * Eine Preisliste, gestaffelt nach Fahrzeugen statt nach Zielgruppe: 36 CHF im Jahr für bis zu drei Fahrzeuge,
- * jedes weitere 30 CHF im Jahr. Zehn Fahrzeuge kosten so 246 CHF im Jahr, fünfundzwanzig 696 CHF; das liegt im
- * unteren Drittel des Marktes (Fleethouse 2,90 €, Fleetio ab 4 USD, CARMADA 6 € plus Grundgebühr je Fahrzeug).
+ * Eine Preisliste, gestaffelt nach Fahrzeugen statt nach Zielgruppe: 36 CHF im Jahr für das erste Fahrzeug, jedes
+ * weitere 24 CHF. Der Preis pro Fahrzeug sinkt also mit der Flotte, wie im Markt üblich. Drei Fahrzeuge kosten
+ * 84 CHF im Jahr, zehn 252, fünfundzwanzig 612 (rund 2 CHF pro Fahrzeug und Monat); das liegt im unteren Drittel
+ * des Marktes (Fleethouse 2,90 €, Fleetio ab 4 USD, CARMADA 6 € plus Grundgebühr je Fahrzeug und Monat).
  */
 export const PLANS: Record<PlanId, Plan> = {
   free: {
@@ -49,29 +50,31 @@ export const PLANS: Record<PlanId, Plan> = {
   klein: {
     id: 'klein',
     name: 'Bis 3 Fahrzeuge',
-    priceChfPerMonth: 3,
+    priceChfPerMonth: 7,
     maxVehicles: 3,
     limits: { ocrPages: 150, chatTokens: 2_000_000 },
   },
   mittel: {
     id: 'mittel',
     name: 'Bis 10 Fahrzeuge',
-    priceChfPerMonth: 20.5,
+    priceChfPerMonth: 21,
     maxVehicles: 10,
     limits: { ocrPages: 500, chatTokens: 5_000_000 },
   },
   gross: {
     id: 'gross',
     name: 'Bis 25 Fahrzeuge',
-    priceChfPerMonth: 58,
+    priceChfPerMonth: 51,
     maxVehicles: 25,
     limits: { ocrPages: 1250, chatTokens: 12_000_000 },
   },
 }
 
-/** Jahrespreis der Staffel: 36 CHF für bis zu drei Fahrzeuge, jedes weitere 30 CHF */
+/** Jahrespreis der Staffel: 36 CHF für das erste Fahrzeug, jedes weitere 24 CHF */
+export const FIRST_VEHICLE_CHF = 36
+export const FURTHER_VEHICLE_CHF = 24
 export function yearlyPriceChf(vehicles: number): number {
-  return 36 + Math.max(0, Math.ceil(vehicles) - 3) * 30
+  return FIRST_VEHICLE_CHF + Math.max(0, Math.ceil(vehicles) - 1) * FURTHER_VEHICLE_CHF
 }
 
 /** Kleinster Plan, der so viele Fahrzeuge abdeckt; mehr als der grösste Plan gibt es auf Anfrage */
