@@ -14,45 +14,54 @@ describe('plans', () => {
   })
 })
 
-describe('fahrzeug-staffel', () => {
-  it('rechnet 36 CHF im Jahr für das erste Fahrzeug, danach 24 CHF je weiteres (fallend, nicht steigend)', async () => {
+// Zwei Listen, gleiche Funktionen: Privat 25 CHF im Jahr bis 5 Fahrzeuge (Parität mit Drivvo Person 24.90),
+// Betrieb 36 CHF pro Fahrzeug und Jahr ab dem ersten (unter Drivvo Flotte 42). Der Unterschied ist die
+// Firmenrechnung, nicht der Funktionsumfang.
+describe('preisliste', () => {
+  it('privat: 25 CHF im Jahr für ein bis fünf Fahrzeuge', async () => {
+    const { yearlyPriceChf, PRIVATE_MAX_VEHICLES } = await import('./plans.ts')
+    expect(PRIVATE_MAX_VEHICLES).toBe(5)
+    expect(yearlyPriceChf(1, 'privat')).toBe(25)
+    expect(yearlyPriceChf(5, 'privat')).toBe(25)
+  })
+
+  it('privat mit mehr als fünf Fahrzeugen zahlt den Betriebspreis', async () => {
     const { yearlyPriceChf } = await import('./plans.ts')
-    expect(yearlyPriceChf(1)).toBe(36)
-    expect(yearlyPriceChf(3)).toBe(84)
-    expect(yearlyPriceChf(10)).toBe(252)
-    expect(yearlyPriceChf(25)).toBe(612)
-    // der Durchschnitt pro Fahrzeug sinkt mit jedem weiteren
-    expect(yearlyPriceChf(10) / 10).toBeLessThan(yearlyPriceChf(3) / 3)
+    expect(yearlyPriceChf(6, 'privat')).toBe(yearlyPriceChf(6, 'betrieb'))
   })
 
-  it('leitet den Monatspreis der Pläne aus der Jahresstaffel ab', async () => {
-    const { PLANS, yearlyPriceChf } = await import('./plans.ts')
-    for (const plan of Object.values(PLANS)) {
-      if (plan.id === 'free')
-        continue
-      expect(plan.priceChfPerMonth).toBeCloseTo(yearlyPriceChf(plan.maxVehicles!) / 12, 2)
-    }
+  it('betrieb: 36 CHF pro Fahrzeug und Jahr, ab dem ersten, ohne Grundgebühr', async () => {
+    const { yearlyPriceChf } = await import('./plans.ts')
+    expect(yearlyPriceChf(1, 'betrieb')).toBe(36)
+    expect(yearlyPriceChf(5, 'betrieb')).toBe(180)
+    expect(yearlyPriceChf(10, 'betrieb')).toBe(360)
+    // Standard ist Betrieb, damit ein Aufruf ohne Zielgruppe nie den billigeren Preis nennt
+    expect(yearlyPriceChf(5)).toBe(180)
   })
 
-  it('wählt den kleinsten Plan, der die Fahrzeuge abdeckt', async () => {
+  it('kennt genau die Pläne Testzeit, Privat und Betrieb', async () => {
+    const { PLANS } = await import('./plans.ts')
+    expect(Object.keys(PLANS).sort()).toEqual(['betrieb', 'free', 'privat'])
+    expect(PLANS.privat.maxVehicles).toBe(5)
+    expect(PLANS.privat.priceChfPerMonth).toBeCloseTo(25 / 12, 2)
+    expect(PLANS.betrieb.maxVehicles).toBeUndefined()
+    expect(PLANS.betrieb.perVehicle).toBe(true)
+    expect(PLANS.betrieb.priceChfPerMonth).toBe(3)
+  })
+
+  it('wählt den Plan nach Zielgruppe und Fahrzeugen', async () => {
     const { planForVehicles } = await import('./plans.ts')
-    // die Testzeit ist kein Kaufplan: ab dem ersten Fahrzeug «klein»
-    expect(planForVehicles(1).id).toBe('klein')
-    expect(planForVehicles(3).id).toBe('klein')
-    expect(planForVehicles(4).id).toBe('mittel')
-    expect(planForVehicles(10).id).toBe('mittel')
-    expect(planForVehicles(11).id).toBe('gross')
-    // mehr als der grösste Plan: grösster Plan, der Rest läuft über eine Anfrage
-    expect(planForVehicles(40).id).toBe('gross')
+    expect(planForVehicles(1, 'privat').id).toBe('privat')
+    expect(planForVehicles(5, 'privat').id).toBe('privat')
+    expect(planForVehicles(6, 'privat').id).toBe('betrieb')
+    expect(planForVehicles(1, 'betrieb').id).toBe('betrieb')
+    expect(planForVehicles(40, 'betrieb').id).toBe('betrieb')
   })
 
-  it('gibt jedem Plan Scans nach Fahrzeugen, mindestens das Konto-Minimum', async () => {
+  it('gibt Privat Scans nach Fahrzeugen und Betrieb ein grosszügiges Fair-Use-Kontingent', async () => {
     const { PLANS, OCR_PAGES_PER_VEHICLE, MIN_OCR_PAGES } = await import('./plans.ts')
-    for (const plan of Object.values(PLANS)) {
-      if (plan.id === 'free')
-        continue
-      expect(plan.limits.ocrPages).toBe(Math.max(MIN_OCR_PAGES, (plan.maxVehicles ?? 0) * OCR_PAGES_PER_VEHICLE))
-    }
+    expect(PLANS.privat.limits.ocrPages).toBe(Math.max(MIN_OCR_PAGES, 5 * OCR_PAGES_PER_VEHICLE))
+    expect(PLANS.betrieb.limits.ocrPages).toBeGreaterThan(PLANS.privat.limits.ocrPages)
   })
 })
 

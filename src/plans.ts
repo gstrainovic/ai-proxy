@@ -7,7 +7,7 @@
  * Jede App bringt ihren eigenen Katalog mit (`PlanCatalog`, per `createApp(deps.plans)` injiziert).
  * `PLANS`/`PlanId` sind der Standard-Katalog von auto-service.
  */
-export type PlanId = 'free' | 'klein' | 'mittel' | 'gross'
+export type PlanId = 'free' | 'privat' | 'betrieb'
 export type LimitKind = 'ocrPages' | 'chatTokens'
 
 export interface Plan {
@@ -16,6 +16,8 @@ export interface Plan {
   priceChfPerMonth: number
   /** Nur bei auto-service: Fahrzeuge, die der Plan abdeckt; Preis und Kontingente hängen daran. Fehlt = ohne Grenze */
   maxVehicles?: number
+  /** Preis gilt pro Fahrzeug (Betrieb), nicht pro Konto */
+  perVehicle?: boolean
   limits: Record<LimitKind, number>
 }
 
@@ -34,11 +36,16 @@ export interface PlanCatalog {
 }
 
 /**
- * Eine Preisliste, gestaffelt nach Fahrzeugen statt nach Zielgruppe: 36 CHF im Jahr für das erste Fahrzeug, jedes
- * weitere 24 CHF. Der Preis pro Fahrzeug sinkt also mit der Flotte, wie im Markt üblich. Drei Fahrzeuge kosten
- * 84 CHF im Jahr, zehn 252, fünfundzwanzig 612 (rund 2 CHF pro Fahrzeug und Monat); das liegt im unteren Drittel
- * des Marktes (Fleethouse 2,90 €, Fleetio ab 4 USD, CARMADA 6 € plus Grundgebühr je Fahrzeug und Monat).
+ * Zwei Listen, gleiche Funktionen. Privat: 25 CHF im Jahr für bis zu fünf Fahrzeuge (Parität mit Drivvo Person
+ * 24.90, dazu Belegscan, MFK, Schweiz, keine Werbung). Betrieb: 36 CHF pro Fahrzeug und Jahr ab dem ersten, ohne
+ * Grundgebühr (Drivvo Flotte 42 ab fünf, Fleethouse 2,90 € im Monat). Der Unterschied zwischen den Listen ist die
+ * Jahresrechnung auf die Firma, nicht der Funktionsumfang; Details business-plan/03-produkt.md «Abgrenzung».
  */
+export type Audience = 'privat' | 'betrieb'
+export const PRIVATE_YEARLY_CHF = 25
+export const PRIVATE_MAX_VEHICLES = 5
+export const BUSINESS_VEHICLE_YEARLY_CHF = 36
+
 export const PLANS: Record<PlanId, Plan> = {
   // Kein Gratis-Plan, sondern die Testzeit (trial.ts): 30 Tage mit allem und ohne Fahrzeuggrenze, damit auch ein
   // Betrieb seine ganze Flotte testen kann; danach 402
@@ -48,42 +55,42 @@ export const PLANS: Record<PlanId, Plan> = {
     priceChfPerMonth: 0,
     limits: { ocrPages: 100, chatTokens: 1_500_000 },
   },
-  klein: {
-    id: 'klein',
-    name: 'Bis 3 Fahrzeuge',
-    priceChfPerMonth: 7,
-    maxVehicles: 3,
-    limits: { ocrPages: 150, chatTokens: 2_000_000 },
+  privat: {
+    id: 'privat',
+    name: 'Privat',
+    priceChfPerMonth: PRIVATE_YEARLY_CHF / 12,
+    maxVehicles: PRIVATE_MAX_VEHICLES,
+    limits: { ocrPages: Math.max(MIN_OCR_PAGES, PRIVATE_MAX_VEHICLES * OCR_PAGES_PER_VEHICLE), chatTokens: 2_000_000 },
   },
-  mittel: {
-    id: 'mittel',
-    name: 'Bis 10 Fahrzeuge',
-    priceChfPerMonth: 21,
-    maxVehicles: 10,
-    limits: { ocrPages: 500, chatTokens: 5_000_000 },
-  },
-  gross: {
-    id: 'gross',
-    name: 'Bis 25 Fahrzeuge',
-    priceChfPerMonth: 51,
-    maxVehicles: 25,
-    limits: { ocrPages: 1250, chatTokens: 12_000_000 },
+  // Pro Fahrzeug abgerechnet, darum keine Fahrzeuggrenze; das Kontingent ist Fair Use für Flotten bis rund 50 Fahrzeuge
+  betrieb: {
+    id: 'betrieb',
+    name: 'Betrieb',
+    priceChfPerMonth: BUSINESS_VEHICLE_YEARLY_CHF / 12,
+    perVehicle: true,
+    limits: { ocrPages: 2500, chatTokens: 12_000_000 },
   },
 }
 
-/** Jahrespreis der Staffel: 36 CHF für das erste Fahrzeug, jedes weitere 24 CHF */
-export const FIRST_VEHICLE_CHF = 36
-export const FURTHER_VEHICLE_CHF = 24
-export function yearlyPriceChf(vehicles: number): number {
-  return FIRST_VEHICLE_CHF + Math.max(0, Math.ceil(vehicles) - 1) * FURTHER_VEHICLE_CHF
+/** Jahrespreis nach Zielgruppe; ohne Angabe Betrieb, damit nie versehentlich der billigere Preis genannt wird */
+export function yearlyPriceChf(vehicles: number, audience: Audience = 'betrieb'): number {
+  const n = Math.max(1, Math.ceil(vehicles))
+  if (audience === 'privat' && n <= PRIVATE_MAX_VEHICLES)
+    return PRIVATE_YEARLY_CHF
+  return n * BUSINESS_VEHICLE_YEARLY_CHF
 }
 
-/** Kleinster bezahlter Plan, der so viele Fahrzeuge abdeckt; mehr als der grösste Plan gibt es auf Anfrage */
-export function planForVehicles(vehicles: number, catalog: PlanCatalog = DEFAULT_CATALOG): Plan {
-  const plans = Object.values(catalog.plans)
-    .filter(p => p.priceChfPerMonth > 0)
-    .sort((a, b) => (a.maxVehicles ?? Infinity) - (b.maxVehicles ?? Infinity))
-  return plans.find(p => vehicles <= (p.maxVehicles ?? Infinity)) ?? plans[plans.length - 1]!
+/** Plan nach Zielgruppe: Privat, solange die Fahrzeuge in den Privatplan passen, sonst Betrieb */
+export function planForVehicles(vehicles: number, audience: Audience = 'betrieb', catalog: PlanCatalog = DEFAULT_CATALOG): Plan {
+  const plans = Object.values(catalog.plans).filter(p => p.priceChfPerMonth > 0)
+  const perAccount = plans.filter(p => !p.perVehicle).sort((a, b) => (a.maxVehicles ?? Infinity) - (b.maxVehicles ?? Infinity))
+  const perVehicle = plans.find(p => p.perVehicle)
+  if (audience === 'privat') {
+    const fits = perAccount.find(p => vehicles <= (p.maxVehicles ?? Infinity))
+    if (fits)
+      return fits
+  }
+  return perVehicle ?? perAccount[perAccount.length - 1]!
 }
 
 /** Standard-Katalog (auto-service). */

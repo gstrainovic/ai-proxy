@@ -79,8 +79,7 @@ async function subscriptionWithTrial(store: Store, userId: string): Promise<Subs
 }
 
 function trialExpiredError(c: Context, catalog: PlanCatalog) {
-  const first = catalog.plans.klein ? yearlyPriceChf(1) : undefined
-  const price = first ? ` Wartungsheft kostet ${first} CHF im Jahr für ein Fahrzeug, jedes weitere ${yearlyPriceChf(2) - first} CHF.` : ''
+  const price = catalog.plans.privat ? ` Wartungsheft kostet ${yearlyPriceChf(1, 'privat')} CHF im Jahr (bis 5 Fahrzeuge), Betriebe ${yearlyPriceChf(1, 'betrieb')} CHF pro Fahrzeug.` : ''
   return mistralError(c, 402, 'trial_expired', `Testzeit vorbei: KI-Scan und Chat brauchen ein Abo.${price} Abo in den Einstellungen.`)
 }
 

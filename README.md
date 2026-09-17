@@ -20,7 +20,7 @@ Bei erreichtem Limit antwortet der Proxy mit 402 im Mistral-Fehlerformat, sodass
 ## Aufbau
 
 - `src/app.ts` erzeugt die Hono-App. Store, Token-Prüfung, `fetch` und Stripe werden injiziert, deshalb ist die Logik ohne Netz testbar.
-- `src/plans.ts` definiert den Standard-Katalog (auto-service) und den Typ `PlanCatalog`. Jede App kann ihren eigenen Katalog per `createApp(deps.plans)` bzw. `createEdgeApp(env, { plans })` injizieren; unbekannte Pläne fallen auf `defaultPlan` zurück. Stripe-Preise kommen aus `STRIPE_PRICE_<PLAN>`.
+- `src/plans.ts` definiert den Standard-Katalog (auto-service) und den Typ `PlanCatalog`. Jede App kann ihren eigenen Katalog per `createApp(deps.plans)` bzw. `createEdgeApp(env, { plans })` injizieren; unbekannte Pläne fallen auf `defaultPlan` zurück. Stripe-Preise kommen aus `STRIPE_PRICE_<PLAN>` (auto-service: `privat` 25 CHF im Jahr bis 5 Fahrzeuge, `betrieb` 36 CHF pro Fahrzeug und Jahr, `perVehicle`).
 - **Interner Aufruf:** Mit `AI_PROXY_INTERNAL_TOKEN` (Node) bzw. dem Service-Role-Key (Edge) als Bearer plus Header `x-user-id` dürfen eigene Server-Prozesse im Namen eines Nutzers zählen und aufrufen, etwa eine OCR-Pipeline ohne Nutzer-Session.
 - `src/stores/` Persistenz: `memory` für Tests, `instant` für InstantDB, `supabase` für Postgres (Tabellen `ai_usage`, `ai_subscriptions`, RPC `ai_add_usage`; Schema in dms `supabase/migrations/00007_ai_proxy.sql`).
 - `src/auth/` Token-Prüfung: `instant` für InstantDB-Refresh-Tokens, `supabase` für Supabase-Access-Tokens (JWT der Session).

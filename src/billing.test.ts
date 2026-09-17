@@ -43,7 +43,7 @@ function setup(billing?: Partial<BillingDeps>) {
       ? {
           stripe: fakeStripe(created),
           webhookSecret: WEBHOOK_SECRET,
-          prices: { klein: 'price_klein', mittel: 'price_mittel' },
+          prices: { privat: 'price_privat', betrieb: 'price_betrieb' },
           appUrl: 'https://app.test',
         }
       : billing as BillingDeps,
@@ -62,14 +62,14 @@ function signedWebhook(event: object) {
 describe('billing checkout', () => {
   it('creates a subscription checkout session for a paid plan', async () => {
     const { app, created } = setup()
-    const res = await app.request('/billing/checkout', { method: 'POST', headers: auth, body: JSON.stringify({ plan: 'mittel' }) })
+    const res = await app.request('/billing/checkout', { method: 'POST', headers: auth, body: JSON.stringify({ plan: 'betrieb' }) })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ url: 'https://checkout.stripe.test/session_1' })
     expect(created[0]).toMatchObject({
       mode: 'subscription',
-      line_items: [{ price: 'price_mittel', quantity: 1 }],
+      line_items: [{ price: 'price_betrieb', quantity: 1 }],
       client_reference_id: 'user-1',
-      metadata: { userId: 'user-1', plan: 'mittel' },
+      metadata: { userId: 'user-1', plan: 'betrieb' },
     })
     expect(created[0].success_url).toContain('https://app.test')
   })
@@ -84,14 +84,14 @@ describe('billing checkout', () => {
 
   it('returns 501 with a German message when Stripe is not configured', async () => {
     const { app } = setup(null as any)
-    const res = await app.request('/billing/checkout', { method: 'POST', headers: auth, body: JSON.stringify({ plan: 'mittel' }) })
+    const res = await app.request('/billing/checkout', { method: 'POST', headers: auth, body: JSON.stringify({ plan: 'betrieb' }) })
     expect(res.status).toBe(501)
     expect(((await res.json()) as any).error.message).toMatch(/nicht konfiguriert/)
   })
 
   it('opens the billing portal for a user with a stripe customer', async () => {
     const { app, store, created } = setup()
-    await store.setSubscription('user-1', { plan: 'mittel', status: 'active', stripeCustomerId: 'cus_1' })
+    await store.setSubscription('user-1', { plan: 'betrieb', status: 'active', stripeCustomerId: 'cus_1' })
     const res = await app.request('/billing/portal', { method: 'POST', headers: auth })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ url: 'https://billing.stripe.test/portal_1' })
@@ -116,35 +116,35 @@ describe('stripe webhook', () => {
       id: 'evt_1',
       object: 'event',
       type: 'checkout.session.completed',
-      data: { object: { object: 'checkout.session', client_reference_id: 'user-1', customer: 'cus_1', subscription: 'sub_1', metadata: { userId: 'user-1', plan: 'klein' } } },
+      data: { object: { object: 'checkout.session', client_reference_id: 'user-1', customer: 'cus_1', subscription: 'sub_1', metadata: { userId: 'user-1', plan: 'privat' } } },
     })
     const res = await app.request('/stripe/webhook', { method: 'POST', headers: { 'stripe-signature': header, 'content-type': 'application/json' }, body: payload })
     expect(res.status).toBe(200)
-    expect(await store.getSubscription('user-1')).toMatchObject({ plan: 'klein', status: 'active', stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_1' })
+    expect(await store.getSubscription('user-1')).toMatchObject({ plan: 'privat', status: 'active', stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_1' })
   })
 
   it('updates plan and status on customer.subscription.updated using the price id', async () => {
     const { app, store } = setup()
-    await store.setSubscription('user-1', { plan: 'klein', status: 'active', stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_1' })
+    await store.setSubscription('user-1', { plan: 'privat', status: 'active', stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_1' })
     const { payload, header } = signedWebhook({
       id: 'evt_2',
       object: 'event',
       type: 'customer.subscription.updated',
-      data: { object: { object: 'subscription', id: 'sub_1', customer: 'cus_1', status: 'past_due', items: { data: [{ price: { id: 'price_mittel' }, current_period_end: 1_800_000_000 }] } } },
+      data: { object: { object: 'subscription', id: 'sub_1', customer: 'cus_1', status: 'past_due', items: { data: [{ price: { id: 'price_betrieb' }, current_period_end: 1_800_000_000 }] } } },
     })
     const res = await app.request('/stripe/webhook', { method: 'POST', headers: { 'stripe-signature': header, 'content-type': 'application/json' }, body: payload })
     expect(res.status).toBe(200)
-    expect(await store.getSubscription('user-1')).toMatchObject({ plan: 'mittel', status: 'past_due', currentPeriodEnd: 1_800_000_000 })
+    expect(await store.getSubscription('user-1')).toMatchObject({ plan: 'betrieb', status: 'past_due', currentPeriodEnd: 1_800_000_000 })
   })
 
   it('falls back to free on customer.subscription.deleted', async () => {
     const { app, store } = setup()
-    await store.setSubscription('user-1', { plan: 'mittel', status: 'active', stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_1' })
+    await store.setSubscription('user-1', { plan: 'betrieb', status: 'active', stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_1' })
     const { payload, header } = signedWebhook({
       id: 'evt_3',
       object: 'event',
       type: 'customer.subscription.deleted',
-      data: { object: { object: 'subscription', id: 'sub_1', customer: 'cus_1', status: 'canceled', items: { data: [{ price: { id: 'price_mittel' } }] } } },
+      data: { object: { object: 'subscription', id: 'sub_1', customer: 'cus_1', status: 'canceled', items: { data: [{ price: { id: 'price_betrieb' } }] } } },
     })
     const res = await app.request('/stripe/webhook', { method: 'POST', headers: { 'stripe-signature': header, 'content-type': 'application/json' }, body: payload })
     expect(res.status).toBe(200)
@@ -183,7 +183,7 @@ describe('billing with an injected plan catalog', () => {
     expect(ok.status).toBe(200)
     expect(created[0].line_items).toEqual([{ price: 'price_business', quantity: 1 }])
 
-    const unknown = await app.request('/billing/checkout', { method: 'POST', headers: auth, body: JSON.stringify({ plan: 'mittel' }) })
+    const unknown = await app.request('/billing/checkout', { method: 'POST', headers: auth, body: JSON.stringify({ plan: 'betrieb' }) })
     expect(unknown.status).toBe(400)
   })
 })

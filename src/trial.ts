@@ -1,7 +1,7 @@
 /**
  * Testzeit statt Gratis-Stufe: Ein Konto ohne Abo darf 30 Tage alles nutzen, danach bleiben Lesen, Erfassen von
  * Hand und Exporte in der App frei, nur KI-Scan und Chat brauchen das Abo. Eine dauerhafte Gratis-Stufe mit einem
- * Fahrzeug würde genau den Privathalter mit einem Auto verschenken, der sonst 36 CHF im Jahr zahlt.
+ * Fahrzeug würde genau den Privathalter verschenken, der sonst 25 CHF im Jahr zahlt.
  */
 import type { Subscription } from './stores/types.ts'
 

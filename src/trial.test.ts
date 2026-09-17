@@ -20,7 +20,7 @@ describe('trialState', () => {
   })
 
   it('gilt nicht für Konten mit aktivem Abo', () => {
-    expect(trialState({ plan: 'klein', status: 'active' }, now)).toBeNull()
+    expect(trialState({ plan: 'privat', status: 'active' }, now)).toBeNull()
   })
 
   it('startTrial legt den Beginn fest', () => {
