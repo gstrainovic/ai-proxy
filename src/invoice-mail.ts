@@ -42,7 +42,7 @@ function voidedText(invoices: InvoiceRecord[], creditor: Creditor, contact: stri
   return [
     `Guten Tag ${contact}`,
     '',
-    'Ihre Kündigung ist eingegangen. Diese Rechnungen sind storniert, bitte nicht bezahlen:',
+    'die Kündigung ist eingegangen. Diese Rechnungen sind storniert, bitte nicht bezahlen:',
     ...invoices.map(i => `- ${i.number} über ${formatChf(i.amount)}`),
     '',
     'Freundliche Grüsse',

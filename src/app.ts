@@ -9,13 +9,15 @@ import type { InvoiceRecord } from './invoice.ts'
 import type { TrialState } from './trial.ts'
 import { createCheckout, createPortal, handleWebhook, notConfigured } from './billing.ts'
 import { isoDate, parseOrder } from './invoice.ts'
-import { cancelSubscription, effectiveSubscription, openInvoices, orderSubscription, periodEnd, resumeSubscription } from './invoice-subscription.ts'
+import { cancelSubscription, effectiveSubscription, markInvoicePaid, openInvoices, orderSubscription, periodEnd, renewalDue, renewSubscription, resumeSubscription } from './invoice-subscription.ts'
 import { checkLimit, currentMonth, resolvePlan } from './limits.ts'
 import { checkBurst, createBurstState } from './rate-limit.ts'
 import { startTrial, trialState } from './trial.ts'
 
 export interface AuthUser {
   id: string
+  /** Aufruf eines eigenen Server-Prozesses mit AI_PROXY_INTERNAL_TOKEN (Jobs), nicht des Nutzers selbst */
+  internal?: boolean
 }
 
 export interface AppDeps {
@@ -68,7 +70,7 @@ async function resolveUser(c: Context, deps: AppDeps): Promise<AuthUser | null> 
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : ''
   if (token && deps.internalToken && token === deps.internalToken) {
     const id = c.req.header('x-user-id')
-    return id ? { id } : null
+    return id ? { id, internal: true } : null
   }
   if (token) {
     const user = await deps.verifyToken(token).catch(() => null)
@@ -109,7 +111,7 @@ function accessTrial(sub: Subscription): TrialState | null {
 
 /** Rechnungs-Abo für die Anzeige in den Einstellungen */
 function billingInfo(sub: Subscription) {
-  if (sub.billing !== 'invoice')
+  if (sub.billing !== 'invoice' || sub.status !== 'active')
     return null
   const open = openInvoices(sub)[0]
   return {
@@ -311,6 +313,48 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
     const next = resumeSubscription(sub)
     await deps.store.setSubscription(userId, next)
     return c.json({ billing: billingInfo(next) })
+  })
+
+  // Nur für den täglichen Abo-Job (AI_PROXY_INTERNAL_TOKEN + x-user-id): der Job zählt die Fahrzeuge in der App,
+  // der Proxy erzeugt und verschickt die Rechnung. Nutzer selbst dürfen weder verlängern noch Zahlungen eintragen.
+  const internalOnly = (c: Context<{ Variables: Variables }>) =>
+    c.get('user').internal ? null : c.json({ error: { code: 'forbidden', message: 'Nur für interne Jobs.' } }, 403)
+
+  app.post('/billing/renew', async (c) => {
+    if (!deps.invoicing)
+      return notConfigured(c)
+    const denied = internalOnly(c)
+    if (denied)
+      return denied
+    const userId = c.get('user').id
+    const body = await c.req.json<{ vehicles?: number }>().catch(() => ({} as { vehicles?: number }))
+    const sub = await deps.store.getSubscription(userId)
+    if (!sub || !renewalDue(sub, today()))
+      return c.json({ error: { code: 'not_due', message: 'Keine Verlängerung fällig.' } }, 409)
+    const next = renewSubscription({ sub, userId, vehicles: Number(body.vehicles) || 1, today: today(), iban: deps.invoicing.iban })
+    await deps.store.setSubscription(userId, next)
+    const invoice = next.invoices![next.invoices!.length - 1]!
+    const mailed = await notify({ type: 'invoice', userId, sub: next, invoice })
+    return c.json({ invoice, mailed })
+  })
+
+  app.post('/billing/paid', async (c) => {
+    if (!deps.invoicing)
+      return notConfigured(c)
+    const denied = internalOnly(c)
+    if (denied)
+      return denied
+    const userId = c.get('user').id
+    const body = await c.req.json<{ key?: string, paidAt?: string }>().catch(() => ({} as { key?: string, paidAt?: string }))
+    const sub = await deps.store.getSubscription(userId)
+    try {
+      const next = markInvoicePaid(sub ?? { plan: '', status: 'canceled' }, String(body.key ?? ''), body.paidAt || today())
+      await deps.store.setSubscription(userId, next)
+      return c.json({ billing: billingInfo(next) })
+    }
+    catch (err) {
+      return c.json({ error: { code: 'not_found', message: (err as Error).message } }, 404)
+    }
   })
 
   app.post('/billing/checkout', c => (deps.billing ? createCheckout(c, deps.billing, deps.store, c.get('user').id, catalog) : notConfigured(c)))

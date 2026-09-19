@@ -11,8 +11,10 @@ import { TRIAL_DAYS } from './trial.ts'
 
 export const RENEWAL_LEAD_DAYS = 30
 
+// Index statt .at(-1): das Frontend importiert diese Datei mit älterem lib-Ziel (ES2020)
 function lastInvoice(sub: Subscription): InvoiceRecord | undefined {
-  return sub.invoices?.at(-1)
+  const invoices = sub.invoices ?? []
+  return invoices[invoices.length - 1]
 }
 
 /** Ende der bezahlten Laufzeit (ISO-Tag, exklusiv) oder undefined ohne Rechnung */
@@ -92,7 +94,7 @@ export function renewSubscription(args: { sub: Subscription, userId: string, veh
 
 /** Zahlung eintragen, gefunden über Referenz oder Rechnungsnummer (Leerzeichen egal) */
 export function markInvoicePaid(sub: Subscription, key: string, paidAt: string): Subscription {
-  const wanted = key.replaceAll(' ', '').toUpperCase()
+  const wanted = key.replace(/\s/g, '').toUpperCase()
   const invoices = sub.invoices ?? []
   const index = invoices.findIndex(i => i.reference === wanted || i.number === wanted)
   if (index < 0)

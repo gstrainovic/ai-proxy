@@ -143,7 +143,7 @@ function userKey(userId: string): string {
 
 /** Rechnungsnummer `WH-<Datum>-<Nutzer>`: eine Rechnung pro Nutzer und Tag */
 export function invoiceNumber(userId: string, issueDate: string): string {
-  return `WH-${issueDate.replaceAll('-', '')}-${userKey(userId)}`
+  return `WH-${issueDate.replace(/-/g, '')}-${userKey(userId)}`
 }
 
 /**
@@ -151,8 +151,9 @@ export function invoiceNumber(userId: string, issueDate: string): string {
  * nach ISO 11649. Beide lassen sich im Kontoauszug (camt.054) der Rechnung zuordnen.
  */
 export function invoiceReference(number: string, iban: string): string {
-  const plain = number.replaceAll('-', '').toUpperCase()
-  if (isQRIBAN(iban.replaceAll(' ', ''))) {
+  // replace mit Regex statt replaceAll: das Frontend importiert diese Datei mit älterem lib-Ziel
+  const plain = number.replace(/-/g, '').toUpperCase()
+  if (isQRIBAN(iban.replace(/\s/g, ''))) {
     const [, date = '', key = ''] = number.split('-')
     const digits = `${date}${Number.parseInt(key, 36).toString().padStart(10, '0')}`.padStart(26, '0')
     return `${digits}${calculateQRReferenceChecksum(digits)}`

@@ -24,7 +24,8 @@ export function resolvePlan(planId: unknown, catalog: PlanCatalog = DEFAULT_CATA
 
 export function checkLimit(planId: unknown, usage: Usage, kind: LimitKind, catalog: PlanCatalog = DEFAULT_CATALOG): LimitResult {
   const plan = resolvePlan(planId, catalog)
-  const limit = catalog.plans[plan].limits[kind]
+  // resolvePlan liefert immer einen Plan des Katalogs
+  const limit = catalog.plans[plan]!.limits[kind]
   const remaining = Math.max(0, limit - usage[kind])
   return { allowed: remaining > 0, remaining, limit, plan }
 }

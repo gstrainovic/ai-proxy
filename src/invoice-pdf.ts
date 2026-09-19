@@ -72,7 +72,7 @@ export async function renderInvoicePdf(args: { creditor: Creditor, address: Bill
     ['Referenz', formatReference(invoice.reference)],
   ]
   if (address.reference)
-    facts.push(['Ihre Referenz', address.reference])
+    facts.push(['Kundenreferenz', address.reference])
   for (const [label, value] of facts) {
     const y = doc.y
     doc.text(label, left, y, { width: mm2pt(40) })

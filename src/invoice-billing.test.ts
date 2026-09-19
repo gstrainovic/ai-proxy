@@ -16,6 +16,8 @@ const order = {
   acceptTerms: true,
 }
 
+const INTERNAL = 'internal-secret'
+
 function setup(options: { today?: string, invoicing?: boolean, failMail?: boolean } = {}) {
   const store = new MemoryStore()
   const notices: InvoiceNotice[] = []
@@ -26,6 +28,7 @@ function setup(options: { today?: string, invoicing?: boolean, failMail?: boolea
     verifyToken: async token => (token === 'valid-token' ? { id: 'user-1' } : null),
     store,
     authBypass: false,
+    internalToken: INTERNAL,
     mistralFetch: async () => new Response(JSON.stringify({ usage: { total_tokens: 1 } }), { headers: { 'content-type': 'application/json' } }),
     invoicing: options.invoicing === false
       ? null
@@ -131,8 +134,14 @@ describe('Kündigen und Zugang', () => {
     // Testzeit beginnt heute, das bezahlte Jahr erst in 30 Tagen: Kündigung storniert die Rechnung
     await usage(app)
     await post(app, '/billing/order', order)
-    await post(app, '/billing/cancel')
+    const res = await post(app, '/billing/cancel')
+    expect(((await res.json()) as any).voided).toBe(1)
     expect(notices.map(n => n.type)).toEqual(['invoice', 'voided'])
+    // Abo ist weg, die Testzeit läuft weiter, eine neue Bestellung geht
+    const info = await usage(app)
+    expect(info.billing).toBeNull()
+    expect(info.trial.active).toBe(true)
+    expect((await post(app, '/billing/order', order)).status).toBe(200)
   })
 
   it('nach Ablauf der Laufzeit sperrt der Proxy KI-Aufrufe wie nach der Testzeit', async () => {
@@ -144,5 +153,42 @@ describe('Kündigen und Zugang', () => {
     setToday('2027-10-20')
     const blocked = await post(app, '/v1/chat/completions', { model: 'mistral-small-latest' })
     expect(blocked.status).toBe(402)
+  })
+})
+
+describe('interne Job-Endpunkte (Verlängerung, Zahlung)', () => {
+  const internal = { 'Authorization': `Bearer ${INTERNAL}`, 'x-user-id': 'user-1', 'content-type': 'application/json' }
+  const postInternal = (app: ReturnType<typeof createApp>, path: string, body: unknown) =>
+    app.request(path, { method: 'POST', headers: internal, body: JSON.stringify(body) })
+
+  it('Verlängerung und Zahlung nur mit internem Token, nicht mit dem Nutzer-Token', async () => {
+    const { app } = setup()
+    await post(app, '/billing/order', order)
+    expect((await post(app, '/billing/renew', { vehicles: 1 })).status).toBe(403)
+    expect((await post(app, '/billing/paid', { key: 'x' })).status).toBe(403)
+  })
+
+  it('verlängert 30 Tage vor Ablauf mit der übergebenen Fahrzeugzahl und verschickt die Rechnung', async () => {
+    const { app, notices, setToday } = setup()
+    await post(app, '/billing/order', order)
+    setToday('2027-08-19')
+    expect((await postInternal(app, '/billing/renew', { vehicles: 7 })).status).toBe(409)
+    setToday('2027-08-20')
+    const res = await postInternal(app, '/billing/renew', { vehicles: 7 })
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as any).invoice).toMatchObject({ amount: 252, periodStart: '2027-09-19' })
+    expect(notices.at(-1)).toMatchObject({ type: 'invoice', invoice: { vehicles: 7 } })
+    // nicht zweimal
+    expect((await postInternal(app, '/billing/renew', { vehicles: 7 })).status).toBe(409)
+  })
+
+  it('trägt eine Zahlung über die Referenz ein', async () => {
+    const { app, store } = setup()
+    const { invoice } = (await (await post(app, '/billing/order', order)).json()) as any
+    const res = await postInternal(app, '/billing/paid', { key: invoice.reference, paidAt: '2026-10-02' })
+    expect(res.status).toBe(200)
+    expect((await store.getSubscription('user-1'))?.invoices?.[0]?.paidAt).toBe('2026-10-02')
+    expect((await usage(app)).billing.openInvoice).toBeNull()
+    expect((await postInternal(app, '/billing/paid', { key: 'RF00NIX' })).status).toBe(404)
   })
 })
