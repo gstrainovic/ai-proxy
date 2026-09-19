@@ -37,6 +37,45 @@ describe('loadConfig stripe prices', () => {
   })
 })
 
+describe('loadConfig Jahresrechnung', () => {
+  const env = { ...base, INSTANT_APP_ID: 'app', INSTANT_ADMIN_TOKEN: 'tok' }
+  const invoiceEnv = {
+    ...env,
+    INVOICE_IBAN: 'CH93 0076 2011 6238 5295 7',
+    INVOICE_CREDITOR_NAME: 'Goran Strainovic',
+    INVOICE_TRADE_NAME: 'Strainovic IT',
+    INVOICE_BRAND: 'Wartungsheft',
+    INVOICE_STREET: 'Bahnstrasse 9b',
+    INVOICE_ZIP: '9323',
+    INVOICE_CITY: 'Steinach',
+    INVOICE_EMAIL: 'info@wartungsheft.ch',
+    INVOICE_WEBSITE: 'wartungsheft.ch',
+  }
+
+  it('ohne INVOICE_IBAN ist die Rechnung aus', () => {
+    expect(loadConfig(env).invoicing).toBeNull()
+  })
+
+  it('mit IBAN: Empfänger vollständig, Versand über Resend mit Absender und Kopie', () => {
+    const config = loadConfig({ ...invoiceEnv, RESEND_TOKEN: 're_x', INVOICE_FROM: 'Wartungsheft <rechnung@wartungsheft.ch>' })
+    expect(config.invoicing).toMatchObject({
+      creditor: { name: 'Goran Strainovic', tradeName: 'Strainovic IT', brand: 'Wartungsheft', street: 'Bahnstrasse 9b', zip: '9323', city: 'Steinach', iban: 'CH93 0076 2011 6238 5295 7', email: 'info@wartungsheft.ch', website: 'wartungsheft.ch' },
+      resendToken: 're_x',
+      from: 'Wartungsheft <rechnung@wartungsheft.ch>',
+      bcc: 'info@wartungsheft.ch',
+    })
+  })
+
+  it('fehlende Absenderangaben brechen mit klarer Meldung ab', () => {
+    const { INVOICE_STREET: _, ...rest } = invoiceEnv
+    expect(() => loadConfig(rest)).toThrow(/INVOICE_STREET/)
+  })
+
+  it('ungültige IBAN bricht beim Start ab, nicht erst bei der ersten Rechnung', () => {
+    expect(() => loadConfig({ ...invoiceEnv, INVOICE_IBAN: 'CH00 0000 0000 0000 0000 0' })).toThrow(/IBAN/)
+  })
+})
+
 describe('loadConfig fair use', () => {
   it('liest AI_PROXY_BURST_LIMIT, sonst 20 Anfragen pro Minute', () => {
     const env = { ...base, SUPABASE_URL: 'u', SUPABASE_SERVICE_ROLE_KEY: 'k' }

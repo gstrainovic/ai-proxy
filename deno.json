@@ -3,6 +3,7 @@
     "hono": "npm:hono@^4.13.7",
     "hono/": "npm:/hono@^4.13.7/",
     "stripe": "npm:stripe@^22.6.1",
+    "swissqrbill/": "npm:/swissqrbill@^4.4.1/",
     "@supabase/supabase-js": "npm:@supabase/supabase-js@^2.49.0"
   }
 }

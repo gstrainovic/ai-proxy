@@ -13,6 +13,9 @@ Kleiner Server zwischen App und Mistral-API. Er hält den Mistral-Key, zählt de
 | `POST /billing/checkout` | Stripe Checkout für einen bezahlten Plan |
 | `POST /billing/portal` | Stripe Kundenportal |
 | `POST /stripe/webhook` | Setzt den Plan nach Zahlung, Änderung oder Kündigung |
+| `POST /billing/order` | Jahresabo auf Rechnung bestellen (Rechnungsadresse, Fahrzeuge, Zustimmung); legt Abo und QR-Rechnung an und verschickt sie |
+| `POST /billing/cancel` | Rechnungs-Abo auf Ende der Laufzeit kündigen; offene Verlängerungen vor ihrem Beginn werden storniert |
+| `POST /billing/resume` | Kündigung zurücknehmen, solange das Abo läuft |
 | `GET /health` | Healthcheck |
 
 Bei erreichtem Limit antwortet der Proxy mit 402 im Mistral-Fehlerformat, sodass das AI SDK die Meldung durchreicht.
@@ -22,6 +25,14 @@ Bei erreichtem Limit antwortet der Proxy mit 402 im Mistral-Fehlerformat, sodass
 - `src/app.ts` erzeugt die Hono-App. Store, Token-Prüfung, `fetch` und Stripe werden injiziert, deshalb ist die Logik ohne Netz testbar.
 - `src/plans.ts` definiert den Standard-Katalog (auto-service) und den Typ `PlanCatalog`. Jede App kann ihren eigenen Katalog per `createApp(deps.plans)` bzw. `createEdgeApp(env, { plans })` injizieren; unbekannte Pläne fallen auf `defaultPlan` zurück. Stripe-Preise kommen aus `STRIPE_PRICE_<PLAN>` (auto-service: `privat` 25 CHF im Jahr bis 5 Fahrzeuge, `betrieb` 36 CHF pro Fahrzeug und Jahr, `perVehicle`).
 - **Interner Aufruf:** Mit `AI_PROXY_INTERNAL_TOKEN` (Node) bzw. dem Service-Role-Key (Edge) als Bearer plus Header `x-user-id` dürfen eigene Server-Prozesse im Namen eines Nutzers zählen und aufrufen, etwa eine OCR-Pipeline ohne Nutzer-Session.
+- **Jahresrechnung** (Betriebe, nur Node mit InstantDB-Store): `src/invoice.ts` prüft die Bestellung und bildet Nummer
+  und Zahlungsreferenz (QR-Referenz bei QR-IBAN, sonst SCOR), `src/invoice-subscription.ts` den Ablauf (Zugang ab
+  Bestellung, bezahltes Jahr nach der Testzeit, Verlängerung 30 Tage vor Ablauf, kündbar bis zum Ablauf),
+  `src/invoice-pdf.ts` das PDF mit QR-Zahlteil (pdfkit + swissqrbill), `src/invoice-mail.ts` den Versand über Resend.
+  Aktiv mit `INVOICE_IBAN`, dazu `INVOICE_CREDITOR_NAME`, `INVOICE_STREET`, `INVOICE_ZIP`, `INVOICE_CITY`,
+  `INVOICE_EMAIL`, optional `INVOICE_TRADE_NAME`, `INVOICE_BRAND`, `INVOICE_WEBSITE`, `INVOICE_FROM`, `INVOICE_BCC`.
+  Ohne `RESEND_TOKEN` wird die Rechnung nur protokolliert. Die Verlängerung läuft als Job in der App (auto-service
+  `scripts/renewals.ts`), der Proxy verlängert nicht selbst.
 - `src/stores/` Persistenz: `memory` für Tests, `instant` für InstantDB, `supabase` für Postgres (Tabellen `ai_usage`, `ai_subscriptions`, RPC `ai_add_usage`; Schema in dms `supabase/migrations/00007_ai_proxy.sql`).
 - `src/auth/` Token-Prüfung: `instant` für InstantDB-Refresh-Tokens, `supabase` für Supabase-Access-Tokens (JWT der Session).
 - `src/node.ts` Einstieg für Node. Wählt das Backend nach Umgebung: `INSTANT_APP_ID` + `INSTANT_ADMIN_TOKEN` oder `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`.

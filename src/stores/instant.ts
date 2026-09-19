@@ -11,7 +11,8 @@ export interface InstantStoreConfig {
 
 /**
  * Nutzungszähler und Abos in InstantDB, geschrieben über das Admin-SDK (umgeht Perms).
- * Entities: `usage` {userId, month, ocrPages, chatTokens}, `subscriptions` {userId, plan, status, stripe*}.
+ * Entities: `usage` {userId, month, ocrPages, chatTokens}, `subscriptions` {userId, plan, status, stripe*,
+ * billing, billingAddress, vehicles, cancelAtPeriodEnd, invoices}.
  * Der Client darf beide nur lesen (siehe instant.perms.ts).
  */
 export class InstantStore implements Store {
@@ -56,11 +57,8 @@ export class InstantStore implements Store {
     return (result.subscriptions as any[])[0] ?? null
   }
 
-  async getSubscription(userId: string): Promise<Subscription | null> {
-    const row = await this.findSubscriptionRow(userId)
-    if (!row)
-      return null
-    return {
+  private toSubscription(row: any): Subscription {
+    const sub: Subscription = {
       plan: row.plan,
       status: row.status,
       trialStartedAt: row.trialStartedAt ?? undefined,
@@ -68,6 +66,25 @@ export class InstantStore implements Store {
       stripeSubscriptionId: row.stripeSubscriptionId ?? undefined,
       currentPeriodEnd: row.currentPeriodEnd ?? undefined,
     }
+    if (row.billing) {
+      sub.billing = row.billing
+      sub.billingAddress = row.billingAddress ?? undefined
+      sub.vehicles = row.vehicles ?? undefined
+      sub.cancelAtPeriodEnd = !!row.cancelAtPeriodEnd
+      sub.invoices = row.invoices ?? []
+    }
+    return sub
+  }
+
+  async getSubscription(userId: string): Promise<Subscription | null> {
+    const row = await this.findSubscriptionRow(userId)
+    return row ? this.toSubscription(row) : null
+  }
+
+  /** Alle Abos auf Rechnung, für den Verlängerungs-Job */
+  async listInvoiceSubscriptions(): Promise<{ userId: string, sub: Subscription }[]> {
+    const result = await this.db.query({ subscriptions: { $: { where: { billing: 'invoice' } } } })
+    return (result.subscriptions as any[]).map(row => ({ userId: row.userId as string, sub: this.toSubscription(row) }))
   }
 
   async setSubscription(userId: string, sub: Subscription): Promise<void> {
@@ -81,6 +98,11 @@ export class InstantStore implements Store {
       stripeCustomerId: sub.stripeCustomerId ?? null,
       stripeSubscriptionId: sub.stripeSubscriptionId ?? null,
       currentPeriodEnd: sub.currentPeriodEnd ?? null,
+      billing: sub.billing ?? null,
+      billingAddress: sub.billingAddress ?? null,
+      vehicles: sub.vehicles ?? null,
+      cancelAtPeriodEnd: sub.cancelAtPeriodEnd ?? null,
+      invoices: sub.invoices ?? null,
       updatedAt: Date.now(),
     }))
   }

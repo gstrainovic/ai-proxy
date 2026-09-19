@@ -1,4 +1,6 @@
+import type { Creditor } from './invoice.ts'
 import process from 'node:process'
+import { isIBANValid } from 'swissqrbill/utils'
 import { BURST_LIMIT } from './rate-limit.ts'
 
 export type Backend = 'instant' | 'supabase'
@@ -29,6 +31,42 @@ export interface ServerConfig {
   stripePrices: Record<string, string>
   /** Optional: Geheimnis für Server-zu-Server-Aufrufe mit x-user-id (AI_PROXY_INTERNAL_TOKEN). */
   internalToken: string
+  /** Jahresrechnung für Betriebe; null ohne INVOICE_IBAN */
+  invoicing: InvoicingConfig | null
+}
+
+export interface InvoicingConfig {
+  creditor: Creditor
+  /** Ohne Token wird die Rechnung nur protokolliert (lokal, E2E) */
+  resendToken: string
+  from: string
+  bcc: string
+}
+
+/** Empfänger aus INVOICE_*; null ohne INVOICE_IBAN. Prüft die IBAN schon beim Start. */
+export function loadInvoicing(env: NodeJS.ProcessEnv): InvoicingConfig | null {
+  if (!env.INVOICE_IBAN)
+    return null
+  if (!isIBANValid(env.INVOICE_IBAN.replaceAll(' ', '')))
+    throw new Error('INVOICE_IBAN ist keine gültige IBAN')
+  const email = required(env, 'INVOICE_EMAIL')
+  const brand = env.INVOICE_BRAND || undefined
+  return {
+    creditor: {
+      name: required(env, 'INVOICE_CREDITOR_NAME'),
+      tradeName: env.INVOICE_TRADE_NAME || undefined,
+      brand,
+      street: required(env, 'INVOICE_STREET'),
+      zip: required(env, 'INVOICE_ZIP'),
+      city: required(env, 'INVOICE_CITY'),
+      iban: env.INVOICE_IBAN,
+      email,
+      website: env.INVOICE_WEBSITE || undefined,
+    },
+    resendToken: env.RESEND_TOKEN || '',
+    from: env.INVOICE_FROM || `${brand ?? 'Rechnung'} <${email}>`,
+    bcc: env.INVOICE_BCC || email,
+  }
 }
 
 function stripePricesFrom(env: NodeJS.ProcessEnv): Record<string, string> {
@@ -78,5 +116,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET || '',
     stripePrices: stripePricesFrom(env),
     internalToken: env.AI_PROXY_INTERNAL_TOKEN || '',
+    invoicing: loadInvoicing(env),
   }
 }

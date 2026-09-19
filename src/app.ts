@@ -5,7 +5,11 @@ import type { Store, Subscription } from './stores/types.ts'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { DEFAULT_CATALOG, LIMIT_LABELS, yearlyPriceChf } from './plans.ts'
+import type { InvoiceRecord } from './invoice.ts'
+import type { TrialState } from './trial.ts'
 import { createCheckout, createPortal, handleWebhook, notConfigured } from './billing.ts'
+import { isoDate, parseOrder } from './invoice.ts'
+import { cancelSubscription, effectiveSubscription, openInvoices, orderSubscription, periodEnd, resumeSubscription } from './invoice-subscription.ts'
 import { checkLimit, currentMonth, resolvePlan } from './limits.ts'
 import { checkBurst, createBurstState } from './rate-limit.ts'
 import { startTrial, trialState } from './trial.ts'
@@ -35,6 +39,22 @@ export interface AppDeps {
    * Bearer = internalToken plus Header `x-user-id`. Ohne x-user-id wird abgelehnt.
    */
   internalToken?: string
+  /** Jahresabo auf Rechnung (Betriebe); null/undefined = nicht konfiguriert (Endpoints antworten 501). */
+  invoicing?: InvoicingDeps | null
+}
+
+/** Ereignis für Mail an Kunde und Betreiber: neue Rechnung oder stornierte Rechnungen nach Kündigung */
+export type InvoiceNotice =
+  | { type: 'invoice', userId: string, sub: Subscription, invoice: InvoiceRecord }
+  | { type: 'voided', userId: string, sub: Subscription, invoices: InvoiceRecord[] }
+
+export interface InvoicingDeps {
+  /** IBAN oder QR-IBAN des Empfängers; bestimmt die Art der Zahlungsreferenz */
+  iban: string
+  /** Versand (PDF per Mail); ein Fehler bricht die Bestellung nicht ab */
+  notify: (notice: InvoiceNotice) => Promise<void>
+  /** Heutiges Datum als ISO-Tag; nur für Tests */
+  today?: () => string
 }
 
 interface Variables {
@@ -63,9 +83,8 @@ async function resolveUser(c: Context, deps: AppDeps): Promise<AuthUser | null> 
   return null
 }
 
-async function planFor(store: Store, userId: string, catalog: PlanCatalog): Promise<string> {
-  const sub = await store.getSubscription(userId)
-  return resolvePlan(sub && sub.status === 'active' ? sub.plan : undefined, catalog)
+function planOf(sub: Subscription, catalog: PlanCatalog): string {
+  return resolvePlan(sub.status === 'active' ? sub.plan : undefined, catalog)
 }
 
 /** Ohne Abo beginnt beim ersten Aufruf die Testzeit; ein bestehender Eintrag bleibt, wie er ist */
@@ -76,6 +95,31 @@ async function subscriptionWithTrial(store: Store, userId: string): Promise<Subs
   const trial = startTrial()
   await store.setSubscription(userId, trial)
   return trial
+}
+
+/**
+ * Testzeit für die Zugangsprüfung: ein abgelaufenes Rechnungs-Abo zählt wie eine abgelaufene Testzeit.
+ * Wurde es vor Beginn des ersten Jahres gekündigt (keine Rechnung mehr), gilt die ursprüngliche Testzeit.
+ */
+function accessTrial(sub: Subscription): TrialState | null {
+  if (sub.billing === 'invoice' && sub.status !== 'active' && sub.invoices?.length)
+    return { active: false, daysLeft: 0, endsAt: periodEnd(sub)! }
+  return trialState(sub)
+}
+
+/** Rechnungs-Abo für die Anzeige in den Einstellungen */
+function billingInfo(sub: Subscription) {
+  if (sub.billing !== 'invoice')
+    return null
+  const open = openInvoices(sub)[0]
+  return {
+    method: 'invoice' as const,
+    company: sub.billingAddress?.company ?? '',
+    vehicles: sub.vehicles ?? 0,
+    periodEnd: periodEnd(sub) ?? null,
+    cancelAtPeriodEnd: !!sub.cancelAtPeriodEnd,
+    openInvoice: open ? { number: open.number, reference: open.reference, amount: open.amount, dueAt: open.dueAt } : null,
+  }
 }
 
 function trialExpiredError(c: Context, catalog: PlanCatalog) {
@@ -114,6 +158,12 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
   const catalog = deps.plans ?? DEFAULT_CATALOG
   // Fair Use: das Monatskontingent ist grosszügig, gegen Skripte hilft nur ein Kurzzeit-Limit
   const burst = createBurstState(deps.burstLimit)
+  const today = () => deps.invoicing?.today?.() ?? isoDate(new Date())
+
+  /** Abo samt Testzeit, ein abgelaufenes Rechnungs-Abo bereits als abgelaufen */
+  async function currentSubscription(userId: string): Promise<Subscription> {
+    return effectiveSubscription(await subscriptionWithTrial(deps.store, userId), today())
+  }
 
   app.use('*', cors({ origin: deps.corsOrigin ?? '*', allowHeaders: ['Authorization', 'Content-Type', 'x-user-id'] }))
 
@@ -161,11 +211,12 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
     }
 
     const month = currentMonth()
-    const sub = await subscriptionWithTrial(deps.store, user.id)
-    const trial = trialState(sub)
+    const sub = await currentSubscription(user.id)
+    const trial = accessTrial(sub)
     if (trial && !trial.active)
       return trialExpiredError(c, catalog)
-    const [plan, usage] = await Promise.all([planFor(deps.store, user.id, catalog), deps.store.getUsage(user.id, month)])
+    const plan = planOf(sub, catalog)
+    const usage = await deps.store.getUsage(user.id, month)
     const check = checkLimit(plan, usage, kind, catalog)
     if (!check.allowed)
       return limitError(c, kind, plan, check.limit, catalog)
@@ -202,9 +253,64 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
   app.get('/me/usage', async (c) => {
     const user = c.get('user')
     const month = currentMonth()
-    const sub = await subscriptionWithTrial(deps.store, user.id)
-    const [plan, usage] = await Promise.all([planFor(deps.store, user.id, catalog), deps.store.getUsage(user.id, month)])
-    return c.json({ plan, month, usage, limits: catalog.plans[plan].limits, plans: catalog.plans, trial: trialState(sub) })
+    const sub = await currentSubscription(user.id)
+    const plan = planOf(sub, catalog)
+    const usage = await deps.store.getUsage(user.id, month)
+    return c.json({ plan, month, usage, limits: catalog.plans[plan].limits, plans: catalog.plans, trial: accessTrial(sub), billing: billingInfo(sub) })
+  })
+
+  // Jahresabo auf Rechnung: Bestellen mit Rechnungsadresse, Kündigen auf Ende der Laufzeit, Kündigung zurücknehmen
+  async function notify(notice: InvoiceNotice): Promise<boolean> {
+    try {
+      await deps.invoicing!.notify(notice)
+      return true
+    }
+    catch (err) {
+      console.error(`[ai-proxy] Rechnungsmail an ${notice.userId} fehlgeschlagen:`, err)
+      return false
+    }
+  }
+
+  app.post('/billing/order', async (c) => {
+    if (!deps.invoicing)
+      return notConfigured(c)
+    const userId = c.get('user').id
+    const parsed = parseOrder(await c.req.json().catch(() => null))
+    if (!parsed.ok)
+      return c.json({ error: { code: 'invalid_order', message: 'Bitte die markierten Felder prüfen.', fields: parsed.errors } }, 400)
+    const existing = await deps.store.getSubscription(userId)
+    const result = orderSubscription({ existing, order: parsed.order, userId, today: today(), iban: deps.invoicing.iban })
+    if ('error' in result)
+      return c.json({ error: { code: 'already_active', message: 'Es läuft bereits ein Abo.' } }, 409)
+    await deps.store.setSubscription(userId, result.sub)
+    const mailed = await notify({ type: 'invoice', userId, sub: result.sub, invoice: result.invoice })
+    return c.json({ invoice: result.invoice, mailed })
+  })
+
+  app.post('/billing/cancel', async (c) => {
+    if (!deps.invoicing)
+      return notConfigured(c)
+    const userId = c.get('user').id
+    const sub = await deps.store.getSubscription(userId)
+    if (!sub || sub.billing !== 'invoice' || effectiveSubscription(sub, today()).status !== 'active')
+      return c.json({ error: { code: 'no_subscription', message: 'Kein laufendes Abo auf Rechnung.' } }, 404)
+    const result = cancelSubscription(sub, today())
+    await deps.store.setSubscription(userId, result.sub)
+    if (result.voided.length)
+      await notify({ type: 'voided', userId, sub: result.sub, invoices: result.voided })
+    return c.json({ billing: billingInfo(result.sub), voided: result.voided.length })
+  })
+
+  app.post('/billing/resume', async (c) => {
+    if (!deps.invoicing)
+      return notConfigured(c)
+    const userId = c.get('user').id
+    const sub = await deps.store.getSubscription(userId)
+    if (!sub || sub.billing !== 'invoice' || effectiveSubscription(sub, today()).status !== 'active')
+      return c.json({ error: { code: 'no_subscription', message: 'Kein laufendes Abo auf Rechnung.' } }, 404)
+    const next = resumeSubscription(sub)
+    await deps.store.setSubscription(userId, next)
+    return c.json({ billing: billingInfo(next) })
   })
 
   app.post('/billing/checkout', c => (deps.billing ? createCheckout(c, deps.billing, deps.store, c.get('user').id, catalog) : notConfigured(c)))

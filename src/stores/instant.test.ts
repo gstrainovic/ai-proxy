@@ -42,6 +42,25 @@ describe.skipIf(!reachable)('instantStore (integration, local InstantDB)', () =>
     expect(await store.getSubscription(userId)).toMatchObject({ plan: 'pro' })
   })
 
+  it('stores an invoice subscription with address and invoices and lists it', async () => {
+    const invoiceUser = `vitest-invoice-${Date.now()}`
+    const sub = {
+      plan: 'betrieb',
+      status: 'active' as const,
+      trialStartedAt: '2026-08-01T08:00:00.000Z',
+      billing: 'invoice' as const,
+      billingAddress: { company: 'Muster AG', contact: 'Petra Muster', street: 'Hauptstrasse 12', zip: '9000', city: 'St. Gallen', email: 'b@muster.ch' },
+      vehicles: 5,
+      cancelAtPeriodEnd: false,
+      invoices: [{ number: 'WH-20260919-ABC123', reference: 'RF18WH20260919ABC123', amount: 180, vehicles: 5, issuedAt: '2026-09-19', dueAt: '2026-10-19', periodStart: '2026-09-19', periodEnd: '2027-09-19' }],
+    }
+    await store.setSubscription(invoiceUser, sub)
+    expect(await store.getSubscription(invoiceUser)).toMatchObject(sub)
+    const listed = await store.listInvoiceSubscriptions()
+    expect(listed.find(e => e.userId === invoiceUser)?.sub).toMatchObject({ billing: 'invoice', vehicles: 5 })
+    expect(listed.every(e => e.sub.billing === 'invoice')).toBe(true)
+  })
+
   it('finds a user by stripe customer id', async () => {
     const customerId = `cus_lookup_${Date.now()}`
     await store.setSubscription(userId, { plan: 'pro', status: 'active', stripeCustomerId: customerId })

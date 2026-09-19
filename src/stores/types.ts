@@ -1,3 +1,4 @@
+import type { BillingAddress, InvoiceRecord } from '../invoice.ts'
 import type { Usage } from '../limits.ts'
 
 export interface Subscription {
@@ -9,6 +10,14 @@ export interface Subscription {
   stripeCustomerId?: string
   stripeSubscriptionId?: string
   currentPeriodEnd?: number
+  /** Zahlweg: Stripe oder Jahresrechnung (invoice-subscription.ts); fehlt = Stripe oder kein Abo */
+  billing?: 'stripe' | 'invoice'
+  /** Nur Jahresrechnung: Rechnungsadresse, abgerechnete Fahrzeuge, Kündigung auf Ende der Laufzeit, Rechnungen */
+  billingAddress?: BillingAddress
+  vehicles?: number
+  cancelAtPeriodEnd?: boolean
+  /** Laufzeit ergibt sich aus der letzten Rechnung (`periodEnd`) */
+  invoices?: InvoiceRecord[]
 }
 
 /** Persistenz für Nutzungszähler und Abos. Implementierungen: MemoryStore (Tests), InstantStore (Produktion). */
