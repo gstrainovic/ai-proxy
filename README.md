@@ -10,6 +10,8 @@ Kleiner Server zwischen App und Mistral-API. Er hält den Mistral-Key, zählt de
 | `POST /v1/ocr` | Durchleitung an Mistral OCR, zählt `ocrPages` |
 | `POST /v1/embeddings` | Durchleitung an Mistral Embed, zählt `total_tokens` als `chatTokens`, nur `mistral-embed` |
 | `GET /me/usage` | Plan, Monat, Verbrauch, Limits des Nutzers und der ganze Plan-Katalog (`plans`) |
+| `POST /me/transcribe` | Diktat: Audio (`multipart/form-data`, Feld `audio`, max. 5 MB) an Voxtral, Antwort `{ text }` |
+| `POST /feedback` | Rückmeldung aus der App: Text und/oder Sprachnachricht, wird transkribiert und per Mail zugestellt |
 | `POST /billing/checkout` | Stripe Checkout für einen bezahlten Plan |
 | `POST /billing/portal` | Stripe Kundenportal |
 | `POST /stripe/webhook` | Setzt den Plan nach Zahlung, Änderung oder Kündigung |

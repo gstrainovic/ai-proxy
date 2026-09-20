@@ -8,7 +8,7 @@ import { DEFAULT_CATALOG, LIMIT_LABELS, yearlyPriceChf } from './plans.ts'
 import type { InvoiceRecord } from './invoice.ts'
 import type { TrialState } from './trial.ts'
 import { createCheckout, createPortal, handleWebhook, notConfigured } from './billing.ts'
-import { feedbackMail, parseFeedback } from './feedback.ts'
+import { feedbackMail, MAX_AUDIO_BYTES, parseFeedback } from './feedback.ts'
 import { isoDate, parseOrder } from './invoice.ts'
 import { cancelSubscription, effectiveSubscription, markInvoicePaid, openInvoices, orderSubscription, periodEnd, renewalDue, renewSubscription, resumeSubscription } from './invoice-subscription.ts'
 import { checkLimit, currentMonth, resolvePlan } from './limits.ts'
@@ -388,6 +388,25 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
     }
     await deps.store.setSubscription(userId, next)
     return c.json({ billing: billingInfo(next) })
+  })
+
+  /**
+   * Diktat: Aufnahme rein, Text raus. Für die Eingabezeile des Chats, Freitextfelder und das Ansagen einer
+   * ganzen Rechnung — die Auswertung in Felder macht danach dasselbe Textmodell wie beim Foto.
+   */
+  app.post('/me/transcribe', async (c) => {
+    const form = await c.req.formData().catch(() => null)
+    const datei = form?.get('audio')
+    const audio = datei instanceof File ? datei : null
+    if (!audio)
+      return c.json({ error: { code: 'invalid_audio', message: 'Keine Aufnahme erhalten.' } }, 400)
+    if (audio.size > MAX_AUDIO_BYTES)
+      return c.json({ error: { code: 'invalid_audio', message: 'Die Aufnahme ist zu lang. Bitte höchstens drei Minuten.' } }, 400)
+
+    const text = await transcribe(deps, new Uint8Array(await audio.arrayBuffer()), audio.name, audio.type)
+    if (text === undefined)
+      return c.json({ error: { code: 'transcription_failed', message: 'Die Aufnahme wurde nicht verstanden. Bitte nochmals oder tippen.' } }, 502)
+    return c.json({ text })
   })
 
   /**
