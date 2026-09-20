@@ -7,6 +7,7 @@ import { creditsForReference, parseCamt054 } from './camt.ts'
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 const qrr = readFileSync(join(fixtures, 'camt054-qrr.xml'), 'utf8')
 const muster = readFileSync(join(fixtures, 'camt054-postfinance-muster.xml'), 'utf8')
+const echt = readFileSync(join(fixtures, 'camt054-testplattform-qrr.xml'), 'utf8')
 
 describe('parseCamt054', () => {
   it('liest die Sammelbuchung als eine Gutschrift pro TxDtls', () => {
@@ -66,6 +67,24 @@ describe('parseCamt054', () => {
 
   it('lässt die Statusmeldungen ?REJECT? und ?ERROR? aus der Mitteilung weg', () => {
     expect(parseCamt054(muster)[0]!.message).toBe('')
+  })
+
+  it('liest die Zahlung auf eine QR-Rechnung von Wartungsheft (Datei der PostFinance-Testplattform)', () => {
+    const credits = parseCamt054(echt)
+    expect(credits).toHaveLength(1)
+    expect(credits[0]).toMatchObject({
+      reference: '000000002026092009137547182',
+      referenceType: 'QRR',
+      amount: 108,
+      currency: 'CHF',
+      bookedAt: '2026-09-21',
+      bankRef: '4329063900000007',
+      // Eine QR-Einzahlung kennt keinen Dbtr, der Zahler steht in UltmtDbtr
+      debtor: 'Muster Sanitär AG',
+      ultimateDebtor: 'Muster Sanitär AG',
+      message: 'Rechnung WH-20260920-F40XNI',
+      charges: 1.75,
+    })
   })
 
   it('wirft bei einer Datei, die keine camt.054-Meldung ist', () => {

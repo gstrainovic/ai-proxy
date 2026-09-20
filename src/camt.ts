@@ -102,7 +102,8 @@ export function parseCamt054(xml: string): CamtCredit[] {
           ...amount(tx.Amt),
           bookedAt,
           bankRef: text(tx.Refs?.AcctSvcrRef ?? tx.AcctSvcrRef ?? entry.AcctSvcrRef),
-          debtor: partyName(tx.RltdPties?.Dbtr),
+          // Eine QR-Einzahlung kennt keinen Dbtr: der Zahler steht dann nur in UltmtDbtr
+          debtor: partyName(tx.RltdPties?.Dbtr) || partyName(tx.RltdPties?.UltmtDbtr),
           ultimateDebtor: partyName(tx.RltdPties?.UltmtDbtr),
           message: remittanceMessage(strd),
           charges: amount(tx.Chrgs?.TtlChrgsAndTaxAmt).amount,
