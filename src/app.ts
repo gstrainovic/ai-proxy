@@ -152,6 +152,14 @@ function trialExpiredError(c: Context, catalog: PlanCatalog) {
 }
 
 /** Erlaubte Modelle im Abo-Modus (Kostenkontrolle): Chat nur Small, Embeddings nur mistral-embed, OCR nur das OCR-Modell. */
+/**
+ * Diktat auf dem Chat-Kontingent: eine Minute Voxtral kostet rund 0.003 $, eine Million Chat-Tokens 0.15 $.
+ * Eine Sekunde Aufnahme entspricht also etwa 333 Tokens. Die Dauer schätzen wir aus der Dateigrösse
+ * (Opus in WebM liefert rund 3 KB pro Sekunde), weil der Proxy die Aufnahme nicht dekodiert.
+ */
+const TOKENS_PER_AUDIO_SECOND = 333
+const AUDIO_BYTES_PER_SECOND = 3000
+
 export const ALLOWED_CHAT_MODELS = new Set(['mistral-small-latest'])
 export const ALLOWED_EMBED_MODELS = new Set(['mistral-embed'])
 
@@ -403,9 +411,22 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
     if (audio.size > MAX_AUDIO_BYTES)
       return c.json({ error: { code: 'invalid_audio', message: 'Die Aufnahme ist zu lang. Bitte höchstens drei Minuten.' } }, 400)
 
+    // Dasselbe Tor wie für Scan und Chat: das Diktat ruft ein Modell auf und kostet Geld
+    const user = c.get('user')
+    const rate = checkBurst(burst, user.id)
+    if (!rate.allowed) {
+      c.header('Retry-After', String(rate.retryAfterSeconds))
+      return mistralError(c, 429, 'rate_limited', `Zu viele Anfragen. Bitte ${rate.retryAfterSeconds} Sekunden warten.`, { retryAfterSeconds: rate.retryAfterSeconds })
+    }
+    const trial = accessTrial(await currentSubscription(user.id))
+    if (trial && !trial.active)
+      return trialExpiredError(c, catalog)
+
     const text = await transcribe(deps, new Uint8Array(await audio.arrayBuffer()), audio.name, audio.type)
     if (text === undefined)
       return c.json({ error: { code: 'transcription_failed', message: 'Die Aufnahme wurde nicht verstanden. Bitte nochmals oder tippen.' } }, 502)
+    const sekunden = Math.ceil(audio.size / AUDIO_BYTES_PER_SECOND)
+    await deps.store.addUsage(user.id, currentMonth(), { chatTokens: sekunden * TOKENS_PER_AUDIO_SECOND })
     return c.json({ text })
   })
 
