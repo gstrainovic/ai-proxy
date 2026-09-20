@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Nachgebaute camt.054-Gutschriftsanzeige nach Swiss Payment Standards (camt.054.001.08, ISO-Version 2019):
+  Sammelbuchung mit zwei QR-Referenzen, eine Belastung und eine Einzelbuchung mit SCOR-Referenz.
+  Die Referenzen stammen aus `invoiceReference` (invoice.ts). Sobald eine Datei der PostFinance-Testplattform
+  (isotest.postfinance.ch) vorliegt, ersetzt sie diese Datei.
+-->
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.054.001.08" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<BkToCstmrDbtCdtNtfctn>
+		<GrpHdr>
+			<MsgId>20261013000000000000001</MsgId>
+			<CreDtTm>2026-10-13T23:40:14</CreDtTm>
+			<MsgPgntn>
+				<PgNb>1</PgNb>
+				<LastPgInd>true</LastPgInd>
+			</MsgPgntn>
+			<AddtlInf>SPS/2.0/PROD</AddtlInf>
+		</GrpHdr>
+		<Ntfctn>
+			<Id>20261013000000000000002</Id>
+			<CreDtTm>2026-10-13T23:40:14</CreDtTm>
+			<Acct>
+				<Id>
+					<IBAN>CH9300762011623852957</IBAN>
+				</Id>
+				<Ccy>CHF</Ccy>
+				<Ownr>
+					<Nm>Goran Strainovic, Strainovic IT</Nm>
+				</Ownr>
+			</Acct>
+			<Ntry>
+				<NtryRef>CH4431999123000889012</NtryRef>
+				<Amt Ccy="CHF">288.00</Amt>
+				<CdtDbtInd>CRDT</CdtDbtInd>
+				<RvslInd>false</RvslInd>
+				<Sts>
+					<Cd>BOOK</Cd>
+				</Sts>
+				<BookgDt>
+					<Dt>2026-10-12</Dt>
+				</BookgDt>
+				<ValDt>
+					<Dt>2026-10-12</Dt>
+				</ValDt>
+				<AcctSvcrRef>1026101200000001</AcctSvcrRef>
+				<BkTxCd>
+					<Domn>
+						<Cd>PMNT</Cd>
+						<Fmly>
+							<Cd>RCDT</Cd>
+							<SubFmlyCd>AUTT</SubFmlyCd>
+						</Fmly>
+					</Domn>
+				</BkTxCd>
+				<NtryDtls>
+					<Btch>
+						<NbOfTxs>2</NbOfTxs>
+					</Btch>
+					<TxDtls>
+						<Refs>
+							<AcctSvcrRef>2026101200000001</AcctSvcrRef>
+							<EndToEndId>NOTPROVIDED</EndToEndId>
+						</Refs>
+						<Amt Ccy="CHF">108.00</Amt>
+						<CdtDbtInd>CRDT</CdtDbtInd>
+						<RltdPties>
+							<Dbtr>
+								<Pty>
+									<Nm>Muster Sanitär AG</Nm>
+									<PstlAdr>
+										<AdrLine>Bahnhofstrasse 4</AdrLine>
+										<AdrLine>9000 St. Gallen</AdrLine>
+									</PstlAdr>
+								</Pty>
+							</Dbtr>
+							<DbtrAcct>
+								<Id>
+									<IBAN>CH5109000000250092291</IBAN>
+								</Id>
+							</DbtrAcct>
+						</RltdPties>
+						<RmtInf>
+							<Strd>
+								<CdtrRefInf>
+									<Tp>
+										<CdOrPrtry>
+											<Prtry>QRR</Prtry>
+										</CdOrPrtry>
+									</Tp>
+									<Ref>000000002026100516660768994</Ref>
+								</CdtrRefInf>
+								<AddtlRmtInf>Rechnung WH-20261005-RJXT5V</AddtlRmtInf>
+							</Strd>
+						</RmtInf>
+					</TxDtls>
+					<TxDtls>
+						<Refs>
+							<AcctSvcrRef>2026101200000002</AcctSvcrRef>
+							<EndToEndId>NOTPROVIDED</EndToEndId>
+						</Refs>
+						<Amt Ccy="CHF">180.00</Amt>
+						<CdtDbtInd>CRDT</CdtDbtInd>
+						<Chrgs>
+							<TtlChrgsAndTaxAmt Ccy="CHF">1.50</TtlChrgsAndTaxAmt>
+						</Chrgs>
+						<RltdPties>
+							<Dbtr>
+								<Pty>
+									<Nm>Garage Weber GmbH</Nm>
+								</Pty>
+							</Dbtr>
+							<UltmtDbtr>
+								<Pty>
+									<Nm>Weber Holding AG</Nm>
+								</Pty>
+							</UltmtDbtr>
+						</RltdPties>
+						<RmtInf>
+							<Strd>
+								<CdtrRefInf>
+									<Tp>
+										<CdOrPrtry>
+											<Prtry>QRR</Prtry>
+										</CdOrPrtry>
+									</Tp>
+									<Ref>000000002026100517593686550</Ref>
+								</CdtrRefInf>
+							</Strd>
+						</RmtInf>
+					</TxDtls>
+				</NtryDtls>
+			</Ntry>
+			<Ntry>
+				<Amt Ccy="CHF">42.00</Amt>
+				<CdtDbtInd>DBIT</CdtDbtInd>
+				<RvslInd>false</RvslInd>
+				<Sts>
+					<Cd>BOOK</Cd>
+				</Sts>
+				<BookgDt>
+					<Dt>2026-10-12</Dt>
+				</BookgDt>
+				<AcctSvcrRef>1026101200000002</AcctSvcrRef>
+				<NtryDtls>
+					<TxDtls>
+						<Refs>
+							<AcctSvcrRef>2026101200000003</AcctSvcrRef>
+						</Refs>
+						<Amt Ccy="CHF">42.00</Amt>
+						<CdtDbtInd>DBIT</CdtDbtInd>
+						<RltdPties>
+							<Cdtr>
+								<Pty>
+									<Nm>Swisscom (Schweiz) AG</Nm>
+								</Pty>
+							</Cdtr>
+						</RltdPties>
+					</TxDtls>
+				</NtryDtls>
+			</Ntry>
+			<Ntry>
+				<Amt Ccy="CHF">72.00</Amt>
+				<CdtDbtInd>CRDT</CdtDbtInd>
+				<RvslInd>false</RvslInd>
+				<Sts>
+					<Cd>BOOK</Cd>
+				</Sts>
+				<BookgDt>
+					<Dt>2026-10-13</Dt>
+				</BookgDt>
+				<ValDt>
+					<Dt>2026-10-13</Dt>
+				</ValDt>
+				<AcctSvcrRef>1026101300000001</AcctSvcrRef>
+				<NtryDtls>
+					<Btch>
+						<NbOfTxs>1</NbOfTxs>
+					</Btch>
+					<TxDtls>
+						<Refs>
+							<AcctSvcrRef>2026101300000001</AcctSvcrRef>
+						</Refs>
+						<Amt Ccy="CHF">72.00</Amt>
+						<CdtDbtInd>CRDT</CdtDbtInd>
+						<RltdPties>
+							<Dbtr>
+								<Pty>
+									<Nm>Autohaus Rickenbach</Nm>
+								</Pty>
+							</Dbtr>
+						</RltdPties>
+						<RmtInf>
+							<Strd>
+								<CdtrRefInf>
+									<Tp>
+										<CdOrPrtry>
+											<Cd>SCOR</Cd>
+										</CdOrPrtry>
+									</Tp>
+									<Ref>RF23WH20261005B65MKI</Ref>
+								</CdtrRefInf>
+								<AddtlRmtInf>Jahresabo 2 Fahrzeuge</AddtlRmtInf>
+							</Strd>
+						</RmtInf>
+					</TxDtls>
+				</NtryDtls>
+			</Ntry>
+		</Ntfctn>
+	</BkToCstmrDbtCdtNtfctn>
+</Document>

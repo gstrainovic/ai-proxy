@@ -345,16 +345,26 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
     if (denied)
       return denied
     const userId = c.get('user').id
-    const body = await c.req.json<{ key?: string, paidAt?: string }>().catch(() => ({} as { key?: string, paidAt?: string }))
+    type PaidBody = { key?: string, paidAt?: string, amount?: number, bankRef?: string }
+    const body = await c.req.json<PaidBody>().catch(() => ({} as PaidBody))
     const sub = await deps.store.getSubscription(userId)
+    const key = String(body.key ?? '')
+    const opts = {
+      ...(typeof body.amount === 'number' ? { amount: body.amount } : {}),
+      ...(body.bankRef ? { bankRef: String(body.bankRef) } : {}),
+    }
+    let next: Subscription
     try {
-      const next = markInvoicePaid(sub ?? { plan: '', status: 'canceled' }, String(body.key ?? ''), body.paidAt || today())
-      await deps.store.setSubscription(userId, next)
-      return c.json({ billing: billingInfo(next) })
+      next = markInvoicePaid(sub ?? { plan: '', status: 'canceled' }, key, body.paidAt || today(), opts)
     }
     catch (err) {
-      return c.json({ error: { code: 'not_found', message: (err as Error).message } }, 404)
+      // Rechnung nicht gefunden: 404. Gefunden, aber Betrag oder Buchung passen nicht: 409, das muss ein Mensch ansehen
+      const message = (err as Error).message
+      const notFound = message.startsWith('Keine Rechnung')
+      return c.json({ error: { code: notFound ? 'not_found' : 'conflict', message } }, notFound ? 404 : 409)
     }
+    await deps.store.setSubscription(userId, next)
+    return c.json({ billing: billingInfo(next) })
   })
 
   app.post('/billing/checkout', c => (deps.billing ? createCheckout(c, deps.billing, deps.store, c.get('user').id, catalog) : notConfigured(c)))

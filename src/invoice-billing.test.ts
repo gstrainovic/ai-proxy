@@ -191,4 +191,17 @@ describe('interne Job-Endpunkte (Verlängerung, Zahlung)', () => {
     expect((await usage(app)).billing.openInvoice).toBeNull()
     expect((await postInternal(app, '/billing/paid', { key: 'RF00NIX' })).status).toBe(404)
   })
+
+  it('bucht keine Zahlung mit falschem Betrag und keine Buchung zweimal', async () => {
+    const { app, store } = setup()
+    const { invoice } = (await (await post(app, '/billing/order', order)).json()) as any
+    const wrong = await postInternal(app, '/billing/paid', { key: invoice.reference, paidAt: '2026-10-02', amount: 10 })
+    expect(wrong.status).toBe(409)
+    expect((await store.getSubscription('user-1'))?.invoices?.[0]?.paidAt).toBeUndefined()
+
+    const ok = await postInternal(app, '/billing/paid', { key: invoice.reference, paidAt: '2026-10-02', amount: invoice.amount, bankRef: 'B-1' })
+    expect(ok.status).toBe(200)
+    expect((await store.getSubscription('user-1'))?.invoices?.[0]).toMatchObject({ paidAt: '2026-10-02', bankRef: 'B-1' })
+    expect((await postInternal(app, '/billing/paid', { key: invoice.reference, paidAt: '2026-10-02', bankRef: 'B-1' })).status).toBe(409)
+  })
 })

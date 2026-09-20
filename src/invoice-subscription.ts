@@ -92,14 +92,28 @@ export function renewSubscription(args: { sub: Subscription, userId: string, veh
   return { ...sub, vehicles, invoices: [...(sub.invoices ?? []), invoice] }
 }
 
-/** Zahlung eintragen, gefunden über Referenz oder Rechnungsnummer (Leerzeichen egal) */
-export function markInvoicePaid(sub: Subscription, key: string, paidAt: string): Subscription {
+/**
+ * Zahlung eintragen, gefunden über Referenz oder Rechnungsnummer (Leerzeichen egal). Mit `amount` wird nur der volle
+ * Rechnungsbetrag gebucht: eine Teilzahlung oder ein falscher Betrag wirft, damit sie gemeldet statt verbucht wird.
+ * `bankRef` ist die Buchungsreferenz der Bank (`AcctSvcrRef` aus camt.054) und verhindert doppeltes Verbuchen
+ * derselben Datei.
+ */
+export function markInvoicePaid(sub: Subscription, key: string, paidAt: string, opts: { amount?: number, bankRef?: string } = {}): Subscription {
   const wanted = key.replace(/\s/g, '').toUpperCase()
   const invoices = sub.invoices ?? []
   const index = invoices.findIndex(i => i.reference === wanted || i.number === wanted)
   if (index < 0)
     throw new Error(`Keine Rechnung mit Referenz oder Nummer ${key}`)
-  return { ...sub, invoices: invoices.map((inv, i) => (i === index ? { ...inv, paidAt } : inv)) }
+  const invoice = invoices[index]!
+  if (invoice.paidAt) {
+    if (opts.bankRef && invoice.bankRef === opts.bankRef)
+      throw new Error(`Buchung ${opts.bankRef} ist bereits verbucht (Rechnung ${invoice.number})`)
+    throw new Error(`Rechnung ${invoice.number} ist seit ${invoice.paidAt} bezahlt`)
+  }
+  if (opts.amount !== undefined && Math.abs(opts.amount - invoice.amount) >= 0.005)
+    throw new Error(`Betrag ${opts.amount.toFixed(2)} weicht von Rechnung ${invoice.number} über ${invoice.amount.toFixed(2)} ab`)
+  const paid = { ...invoice, paidAt, ...(opts.bankRef ? { bankRef: opts.bankRef } : {}) }
+  return { ...sub, invoices: invoices.map((inv, i) => (i === index ? paid : inv)) }
 }
 
 export function openInvoices(sub: Subscription): InvoiceRecord[] {

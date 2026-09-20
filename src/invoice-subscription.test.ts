@@ -158,6 +158,28 @@ describe('Zahlungen', () => {
     expect(() => markInvoicePaid(sub, 'RF00XYZ', '2026-10-02')).toThrow()
   })
 
+  it('bucht nur den vollen Betrag, Teilzahlung wirft', () => {
+    const { sub, invoice } = ordered('2026-09-19')
+    const paid = markInvoicePaid(sub, invoice.reference, '2026-10-02', { amount: invoice.amount })
+    expect(paid.invoices![0]!.paidAt).toBe('2026-10-02')
+    expect(() => markInvoicePaid(sub, invoice.reference, '2026-10-02', { amount: invoice.amount - 10 }))
+      .toThrow(/Betrag/)
+  })
+
+  it('merkt sich die Bankreferenz und bucht dieselbe Buchung nicht zweimal', () => {
+    const { sub, invoice } = ordered('2026-09-19')
+    const paid = markInvoicePaid(sub, invoice.reference, '2026-10-02', { bankRef: '2026100200000001' })
+    expect(paid.invoices![0]!.bankRef).toBe('2026100200000001')
+    expect(() => markInvoicePaid(paid, invoice.reference, '2026-10-05', { bankRef: '2026100200000001' }))
+      .toThrow(/bereits/)
+  })
+
+  it('eine zweite Zahlung auf eine bezahlte Rechnung wirft', () => {
+    const { sub, invoice } = ordered('2026-09-19')
+    const paid = markInvoicePaid(sub, invoice.reference, '2026-10-02')
+    expect(() => markInvoicePaid(paid, invoice.reference, '2026-10-05')).toThrow(/bezahlt/)
+  })
+
   it('überfällig ist eine offene Rechnung nach dem Zahlungsziel', () => {
     const { sub } = ordered('2026-09-19')
     expect(overdueInvoices(sub, '2026-10-19')).toEqual([])

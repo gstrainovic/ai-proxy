@@ -52,6 +52,8 @@ export interface InvoiceRecord {
   periodStart: string
   periodEnd: string
   paidAt?: string
+  /** Buchungsreferenz der Bank (`AcctSvcrRef` aus camt.054), gesetzt bei einer Zahlung aus dem Kontoauszug */
+  bankRef?: string
 }
 
 export type OrderField = keyof Order | 'acceptTerms'
