@@ -126,7 +126,7 @@ export async function renderInvoicePdf(args: { creditor: Creditor, address: Bill
   // Bedingungen
   doc.font('Helvetica').fontSize(9).fillColor('#444444').moveDown(1.5)
     .text('Ohne MWST: nicht mehrwertsteuerpflichtig.', left)
-    .text(`Zahlbar innert 30 Tagen mit dem QR-Zahlteil unten. Das Abo verlängert sich jeweils um ein Jahr und ist bis zum Ablauf ohne Frist kündbar, in der App unter Einstellungen oder per Mail an ${creditor.email}.`, left, doc.y, { width })
+    .text(`Zahlbar innert 30 Tagen mit dem QR-Zahlteil unten, am einfachsten im E-Banking oder mit der Banking-App. Das Abo verlängert sich jeweils um ein Jahr und ist bis zum Ablauf ohne Frist kündbar, in der App unter Einstellungen oder per Mail an ${creditor.email}.`, left, doc.y, { width })
   doc.fillColor('#000000')
 
   qrBill.attachTo(doc)

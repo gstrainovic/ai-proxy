@@ -27,7 +27,7 @@ function invoiceText(invoice: InvoiceRecord, creditor: Creditor, appUrl: string,
     `im Anhang die Rechnung ${invoice.number}: ${invoiceLines(invoice, creditor.brand ?? 'Wartungsheft')[0]}, `
     + `${invoice.vehicles} ${invoice.vehicles === 1 ? 'Fahrzeug' : 'Fahrzeuge'}.`,
     '',
-    `Betrag: ${formatChf(invoice.amount)}, zahlbar bis ${formatDay(invoice.dueAt)} mit dem QR-Zahlteil im PDF.`,
+    `Betrag: ${formatChf(invoice.amount)}, zahlbar bis ${formatDay(invoice.dueAt)} mit dem QR-Zahlteil im PDF — am einfachsten im E-Banking oder mit der Banking-App.`,
     '',
     `Das Abo verlängert sich jeweils um ein Jahr. Kündigen geht bis zum Ablauf ohne Frist, in der App unter Einstellungen (${appUrl}/settings) oder mit einer Antwort auf diese Mail.`,
     '',
