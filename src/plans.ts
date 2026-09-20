@@ -47,13 +47,14 @@ export const PRIVATE_MAX_VEHICLES = 5
 export const BUSINESS_VEHICLE_YEARLY_CHF = 36
 
 export const PLANS: Record<PlanId, Plan> = {
-  // Kein Gratis-Plan, sondern die Testzeit (trial.ts): 30 Tage mit allem und ohne Fahrzeuggrenze, damit auch ein
-  // Betrieb seine ganze Flotte testen kann; danach 402
+  // Kein Gratis-Plan, sondern die Testzeit (trial.ts): 30 Tage mit allen Funktionen und ohne Fahrzeuggrenze,
+  // damit auch ein Betrieb seine ganze Flotte testen kann; danach 402. Das Kontingent entspricht dem Privatplan:
+  // in der Testzeit soll niemand an eine Grenze stossen, die er als zahlender Kunde nicht hätte.
   free: {
     id: 'free',
     name: 'Testzeit',
     priceChfPerMonth: 0,
-    limits: { ocrPages: 100, chatTokens: 1_500_000 },
+    limits: { ocrPages: Math.max(MIN_OCR_PAGES, PRIVATE_MAX_VEHICLES * OCR_PAGES_PER_VEHICLE), chatTokens: 2_000_000 },
   },
   privat: {
     id: 'privat',

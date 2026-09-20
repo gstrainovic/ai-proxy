@@ -3,13 +3,15 @@ import { PLANS } from './plans.ts'
 import { checkLimit, currentMonth, emptyUsage } from './limits.ts'
 
 describe('plans', () => {
-  it('free plan exists and has strictly smaller limits than paid plans', () => {
+  // Die Testzeit liegt auf dem Niveau des Privatplans: wer testet, soll an keine Grenze stossen, die er als
+  // zahlender Kunde nicht hätte. Ein bezahlter Plan darf nie weniger bieten.
+  it('kein bezahlter Plan hat ein kleineres Kontingent als die Testzeit', () => {
     expect(PLANS.free).toBeDefined()
     for (const [id, plan] of Object.entries(PLANS)) {
       if (id === 'free')
         continue
-      expect(plan.limits.ocrPages).toBeGreaterThan(PLANS.free.limits.ocrPages)
-      expect(plan.limits.chatTokens).toBeGreaterThan(PLANS.free.limits.chatTokens)
+      expect(plan.limits.ocrPages).toBeGreaterThanOrEqual(PLANS.free.limits.ocrPages)
+      expect(plan.limits.chatTokens).toBeGreaterThanOrEqual(PLANS.free.limits.chatTokens)
     }
   })
 })
