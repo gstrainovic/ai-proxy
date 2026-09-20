@@ -33,6 +33,16 @@ export interface ServerConfig {
   internalToken: string
   /** Jahresrechnung für Betriebe; null ohne INVOICE_IBAN */
   invoicing: InvoicingConfig | null
+  /** Rückmeldungen aus der App; null ohne Ziel-Postfach */
+  feedback: FeedbackConfig | null
+}
+
+export interface FeedbackConfig {
+  /** Postfach, das die Rückmeldungen bekommt */
+  to: string
+  from: string
+  /** Ohne Token landet die Rückmeldung im Log (lokal, E2E) */
+  resendToken: string
 }
 
 export interface InvoicingConfig {
@@ -69,6 +79,21 @@ export function loadInvoicing(env: NodeJS.ProcessEnv): InvoicingConfig | null {
   }
 }
 
+/**
+ * Rückmeldungen aus der App hängen nicht an der Rechnungsstellung: eine Instanz ohne IBAN soll Fehler und
+ * Wünsche trotzdem entgegennehmen. Ziel ist FEEDBACK_TO, ersatzweise das Postfach aus INVOICE_EMAIL.
+ */
+export function loadFeedback(env: NodeJS.ProcessEnv, invoicing: InvoicingConfig | null): FeedbackConfig | null {
+  const to = env.FEEDBACK_TO || invoicing?.creditor.email || ''
+  if (!to)
+    return null
+  return {
+    to,
+    from: env.FEEDBACK_FROM || invoicing?.from || `Wartungsheft <${to}>`,
+    resendToken: env.RESEND_TOKEN || '',
+  }
+}
+
 function stripePricesFrom(env: NodeJS.ProcessEnv): Record<string, string> {
   const prices: Record<string, string> = {}
   for (const [name, value] of Object.entries(env)) {
@@ -97,6 +122,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const authBypass = env.AI_PROXY_AUTH_BYPASS === '1'
   const mistralApiKey = required(env, 'MISTRAL_API_KEY')
   const backend = detectBackend(env)
+  const invoicing = loadInvoicing(env)
   return {
     port: Number(env.PORT || 8787),
     mistralApiKey,
@@ -116,6 +142,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET || '',
     stripePrices: stripePricesFrom(env),
     internalToken: env.AI_PROXY_INTERNAL_TOKEN || '',
-    invoicing: loadInvoicing(env),
+    invoicing,
+    feedback: loadFeedback(env, invoicing),
   }
 }

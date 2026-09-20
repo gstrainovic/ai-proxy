@@ -37,6 +37,34 @@ describe('loadConfig stripe prices', () => {
   })
 })
 
+describe('loadConfig Rückmeldungen', () => {
+  const env = { ...base, INSTANT_APP_ID: 'app', INSTANT_ADMIN_TOKEN: 'tok' }
+
+  it('läuft ohne Rechnungsangaben: FEEDBACK_TO und RESEND_TOKEN genügen', () => {
+    const config = loadConfig({ ...env, RESEND_TOKEN: 're_x', FEEDBACK_TO: 'info@wartungsheft.ch' })
+    expect(config.invoicing).toBeNull()
+    expect(config.feedback).toMatchObject({ to: 'info@wartungsheft.ch', resendToken: 're_x' })
+  })
+
+  it('ohne Ziel bleibt die Rückmeldung aus', () => {
+    expect(loadConfig({ ...env, RESEND_TOKEN: 're_x' }).feedback).toBeNull()
+  })
+
+  it('das Postfach der Rechnung dient als Ziel, wenn FEEDBACK_TO fehlt', () => {
+    const config = loadConfig({
+      ...env,
+      RESEND_TOKEN: 're_x',
+      INVOICE_IBAN: 'CH93 0076 2011 6238 5295 7',
+      INVOICE_CREDITOR_NAME: 'Goran Strainovic',
+      INVOICE_STREET: 'Bahnstrasse 9b',
+      INVOICE_ZIP: '9323',
+      INVOICE_CITY: 'Steinach',
+      INVOICE_EMAIL: 'info@wartungsheft.ch',
+    })
+    expect(config.feedback?.to).toBe('info@wartungsheft.ch')
+  })
+})
+
 describe('loadConfig Jahresrechnung', () => {
   const env = { ...base, INSTANT_APP_ID: 'app', INSTANT_ADMIN_TOKEN: 'tok' }
   const invoiceEnv = {

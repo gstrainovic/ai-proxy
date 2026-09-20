@@ -56,13 +56,14 @@ const invoicing = invoicingConfig
   : null
 
 /**
- * Rückmeldungen aus der App. Absender und Postfach kommen aus der Rechnungs-Konfiguration, damit nur ein Satz
- * Adressen gepflegt wird; ohne RESEND_TOKEN landet die Rückmeldung im Log statt im Postfach.
+ * Rückmeldungen aus der App: FEEDBACK_TO, ersatzweise das Postfach der Rechnung. Bewusst nicht an die IBAN
+ * gekoppelt — eine Instanz ohne Rechnungsstellung soll Fehler und Wünsche trotzdem annehmen. Ohne RESEND_TOKEN
+ * landet die Rückmeldung im Log statt im Postfach.
  */
-const feedback = invoicingConfig
+const feedback = config.feedback
   ? {
-      notify: invoicingConfig.resendToken
-        ? createFeedbackNotifier({ token: invoicingConfig.resendToken, from: invoicingConfig.from, to: invoicingConfig.creditor.email })
+      notify: config.feedback.resendToken
+        ? createFeedbackNotifier({ token: config.feedback.resendToken, from: config.feedback.from, to: config.feedback.to })
         : async (notice: FeedbackNotice) => {
           console.warn(`[ai-proxy] Rückmeldung (kein RESEND_TOKEN, nicht versandt): ${notice.subject}\n${notice.text}`)
         },

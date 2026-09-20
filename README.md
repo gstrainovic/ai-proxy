@@ -33,7 +33,10 @@ Bei erreichtem Limit antwortet der Proxy mit 402 im Mistral-Fehlerformat, sodass
   `src/invoice-pdf.ts` das PDF mit QR-Zahlteil (pdfkit + swissqrbill), `src/invoice-mail.ts` den Versand über Resend.
   Aktiv mit `INVOICE_IBAN`, dazu `INVOICE_CREDITOR_NAME`, `INVOICE_STREET`, `INVOICE_ZIP`, `INVOICE_CITY`,
   `INVOICE_EMAIL`, optional `INVOICE_TRADE_NAME`, `INVOICE_BRAND`, `INVOICE_WEBSITE`, `INVOICE_FROM`, `INVOICE_BCC`.
-  Ohne `RESEND_TOKEN` wird die Rechnung nur protokolliert. Die Verlängerung läuft als Job in der App (auto-service
+  Ohne `RESEND_TOKEN` wird die Rechnung nur protokolliert.
+- **Rückmeldungen** aus der App (`/feedback`): Ziel ist `FEEDBACK_TO`, ersatzweise `INVOICE_EMAIL`, Absender
+  `FEEDBACK_FROM`. Bewusst unabhängig von der IBAN, damit eine Instanz ohne Rechnungsstellung Fehler und Wünsche
+  trotzdem annimmt. Ohne Ziel antwortet `/feedback` mit 501, ohne `RESEND_TOKEN` landet alles im Log. Die Verlängerung läuft als Job in der App (auto-service
   `scripts/renewals.ts`), der Proxy verlängert nicht selbst.
 - `src/stores/` Persistenz: `memory` für Tests, `instant` für InstantDB, `supabase` für Postgres (Tabellen `ai_usage`, `ai_subscriptions`, RPC `ai_add_usage`; Schema in dms `supabase/migrations/00007_ai_proxy.sql`).
 - `src/auth/` Token-Prüfung: `instant` für InstantDB-Refresh-Tokens, `supabase` für Supabase-Access-Tokens (JWT der Session).
