@@ -260,7 +260,8 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
     const sub = await currentSubscription(user.id)
     const plan = planOf(sub, catalog)
     const usage = await deps.store.getUsage(user.id, month)
-    return c.json({ plan, month, usage, limits: catalog.plans[plan].limits, plans: catalog.plans, trial: accessTrial(sub), billing: billingInfo(sub) })
+    // `ordering`: erst mit IBAN und Versand nimmt der Proxy Bestellungen an; ohne das zeigt die App keinen Kaufweg
+    return c.json({ plan, month, usage, limits: catalog.plans[plan].limits, plans: catalog.plans, trial: accessTrial(sub), billing: billingInfo(sub), ordering: !!deps.invoicing })
   })
 
   // Jahresabo auf Rechnung: Bestellen mit Rechnungsadresse, Kündigen auf Ende der Laufzeit, Kündigung zurücknehmen

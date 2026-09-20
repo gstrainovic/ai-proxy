@@ -204,4 +204,9 @@ describe('interne Job-Endpunkte (Verlängerung, Zahlung)', () => {
     expect((await store.getSubscription('user-1'))?.invoices?.[0]).toMatchObject({ paidAt: '2026-10-02', bankRef: 'B-1' })
     expect((await postInternal(app, '/billing/paid', { key: invoice.reference, paidAt: '2026-10-02', bankRef: 'B-1' })).status).toBe(409)
   })
+
+  it('meldet in der Nutzung, ob eine Bestellung überhaupt möglich ist', async () => {
+    expect((await usage(setup().app)).ordering).toBe(true)
+    expect((await usage(setup({ invoicing: false }).app)).ordering).toBe(false)
+  })
 })
