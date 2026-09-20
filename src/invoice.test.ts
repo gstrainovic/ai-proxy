@@ -1,6 +1,6 @@
 import { isQRReferenceValid, isSCORReferenceValid } from 'swissqrbill/utils'
 import { describe, expect, it } from 'vitest'
-import { addYears, createInvoice, invoiceNumber, invoiceReference, parseOrder } from './invoice.ts'
+import { addYears, createInvoice, invoiceNumber, invoiceReference, parseOrder, splitStreet } from './invoice.ts'
 
 const IBAN = 'CH93 0076 2011 6238 5295 7'
 const QR_IBAN = 'CH44 3199 9123 0008 8901 2'
@@ -116,5 +116,25 @@ describe('createInvoice', () => {
     })
     expect(isSCORReferenceValid(invoice.reference)).toBe(true)
     expect(invoice.paidAt).toBeUndefined()
+  })
+})
+
+describe('splitStreet', () => {
+  it('trennt die Hausnummer vom Strassennamen', () => {
+    expect(splitStreet('Bahnstrasse 9b')).toEqual({ street: 'Bahnstrasse', buildingNumber: '9b' })
+    expect(splitStreet('Hauptstrasse 12')).toEqual({ street: 'Hauptstrasse', buildingNumber: '12' })
+    expect(splitStreet('Route de Berne 3-5')).toEqual({ street: 'Route de Berne', buildingNumber: '3-5' })
+    expect(splitStreet('Im Feld 17 A')).toEqual({ street: 'Im Feld', buildingNumber: '17 A' })
+    expect(splitStreet('Chemin des Vignes 4/2')).toEqual({ street: 'Chemin des Vignes', buildingNumber: '4/2' })
+  })
+
+  it('lässt eine Adresse ohne Hausnummer unangetastet', () => {
+    expect(splitStreet('Postfach')).toEqual({ street: 'Postfach' })
+    expect(splitStreet('Postfach 1234')).toEqual({ street: 'Postfach 1234' })
+    expect(splitStreet('')).toEqual({ street: '' })
+  })
+
+  it('räumt Leerzeichen und ein Komma vor der Nummer weg', () => {
+    expect(splitStreet('  Bahnstrasse ,  9b ')).toEqual({ street: 'Bahnstrasse', buildingNumber: '9b' })
   })
 })

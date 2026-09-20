@@ -1,7 +1,7 @@
 import type { Creditor } from './invoice-pdf.ts'
 import { describe, expect, it } from 'vitest'
 import { createInvoice } from './invoice.ts'
-import { formatChf, formatDay, renderInvoicePdf } from './invoice-pdf.ts'
+import { formatChf, formatDay, qrBillData, renderInvoicePdf } from './invoice-pdf.ts'
 
 const creditor: Creditor = {
   name: 'Goran Strainovic',
@@ -43,5 +43,23 @@ describe('renderInvoicePdf', () => {
     const bad = { ...creditor, iban: 'CH00 0000 0000 0000 0000 0' }
     const invoice = createInvoice({ userId: 'user-a', vehicles: 1, issueDate: '2026-09-19', periodStart: '2026-09-19', iban: creditor.iban })
     await expect(renderInvoicePdf({ creditor: bad, address, invoice })).rejects.toThrow()
+  })
+})
+
+describe('qrBillData', () => {
+  it('trägt Strasse und Hausnummer im Zahlteil getrennt ein', () => {
+    const invoice = createInvoice({ userId: 'user-a', vehicles: 3, issueDate: '2026-09-20', periodStart: '2026-09-20', iban: creditor.iban })
+    const data = qrBillData({ creditor, address, invoice })
+    expect(data.creditor).toMatchObject({ address: 'Bahnstrasse', buildingNumber: '9b', zip: '9323', city: 'Steinach' })
+    expect(data.debtor).toMatchObject({ address: 'Hauptstrasse', buildingNumber: '12', zip: '9000', city: 'St. Gallen' })
+    expect(data.amount).toBe(108)
+    expect(data.reference).toBe(invoice.reference)
+  })
+
+  it('ohne Hausnummer bleibt die Zeile die Strasse', () => {
+    const invoice = createInvoice({ userId: 'user-a', vehicles: 1, issueDate: '2026-09-20', periodStart: '2026-09-20', iban: creditor.iban })
+    const data = qrBillData({ creditor: { ...creditor, street: 'Postfach' }, address, invoice })
+    expect(data.creditor.address).toBe('Postfach')
+    expect(data.creditor.buildingNumber).toBeUndefined()
   })
 })

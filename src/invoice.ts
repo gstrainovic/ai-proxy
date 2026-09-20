@@ -143,6 +143,26 @@ function userKey(userId: string): string {
   return hash.toString(36).toUpperCase().padStart(6, '0').slice(-6)
 }
 
+// Hausnummer am Ende der Zeile: «9b», «12», «3-5», «17 A», «4/2»
+const BUILDING_NUMBER = /^(.*?)[\s,]+(\d+\s?[a-z]?(?:[-/]\d+\s?[a-z]?)?)$/i
+// Postfachzeilen tragen keine Hausnummer, die Zahl dahinter ist die Fachnummer
+const PO_BOX = /^(?:postfach|case postale|casella postale|p\.?\s?o\.?\s?box)\b/i
+
+/**
+ * Strasse und Hausnummer trennen. Die Swiss Payment Standards verlangen im QR-Zahlteil getrennte Felder
+ * (`StrtNm` und `BldgNb`); fehlt die Hausnummer, erfasst die Post Einzahlungen am Schalter kostenpflichtig nach.
+ * Ohne erkennbare Nummer bleibt die Zeile, wie sie ist.
+ */
+export function splitStreet(street: string): { street: string, buildingNumber?: string } {
+  const line = street.trim()
+  if (!line || PO_BOX.test(line))
+    return { street: line }
+  const match = BUILDING_NUMBER.exec(line)
+  if (!match)
+    return { street: line }
+  return { street: match[1]!.trim(), buildingNumber: match[2]!.trim() }
+}
+
 /** Rechnungsnummer `WH-<Datum>-<Nutzer>`: eine Rechnung pro Nutzer und Tag */
 export function invoiceNumber(userId: string, issueDate: string): string {
   return `WH-${issueDate.replace(/-/g, '')}-${userKey(userId)}`

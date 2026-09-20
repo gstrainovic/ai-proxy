@@ -4,12 +4,13 @@
  * nicht mehrwertsteuerpflichtig (Umsatz unter 100'000 CHF, business-plan Kapitel 6).
  * Nur Node (pdfkit); Edge-Builds importieren diese Datei nicht.
  */
+import type { Data } from 'swissqrbill/types'
 import type { BillingAddress, Creditor, InvoiceRecord } from './invoice.ts'
 import { Buffer } from 'node:buffer'
 import PDFDocument from 'pdfkit'
 import { SwissQRBill } from 'swissqrbill/pdf'
 import { formatReference, mm2pt } from 'swissqrbill/utils'
-import { addDays } from './invoice.ts'
+import { addDays, splitStreet } from './invoice.ts'
 import { BUSINESS_VEHICLE_YEARLY_CHF } from './plans.ts'
 
 export type { Creditor } from './invoice.ts'
@@ -28,17 +29,28 @@ function senderLine(c: Creditor): string {
   return c.tradeName ? `${c.name}, ${c.tradeName}` : c.name
 }
 
+/**
+ * Daten des QR-Zahlteils. Strasse und Hausnummer stehen getrennt (`address` und `buildingNumber`), wie es die
+ * Swiss Payment Standards verlangen: sonst erfasst die Post Einzahlungen am Schalter kostenpflichtig nach.
+ */
+export function qrBillData(args: { creditor: Creditor, address: BillingAddress, invoice: InvoiceRecord }): Data {
+  const { creditor, address, invoice } = args
+  const from = splitStreet(creditor.street)
+  const to = splitStreet(address.street)
+  return {
+    amount: invoice.amount,
+    currency: 'CHF',
+    creditor: { account: creditor.iban, name: senderLine(creditor), address: from.street, buildingNumber: from.buildingNumber, zip: creditor.zip, city: creditor.city, country: 'CH' },
+    debtor: { name: address.company, address: to.street, buildingNumber: to.buildingNumber, zip: address.zip, city: address.city, country: 'CH' },
+    reference: invoice.reference,
+    message: `Rechnung ${invoice.number}`,
+  }
+}
+
 export async function renderInvoicePdf(args: { creditor: Creditor, address: BillingAddress, invoice: InvoiceRecord }): Promise<Uint8Array> {
   const { creditor, address, invoice } = args
   // Zuerst den Zahlteil bauen: swissqrbill prüft IBAN, Referenz und Adressen und wirft bei Fehlern
-  const qrBill = new SwissQRBill({
-    amount: invoice.amount,
-    currency: 'CHF',
-    creditor: { account: creditor.iban, name: senderLine(creditor), address: creditor.street, zip: creditor.zip, city: creditor.city, country: 'CH' },
-    debtor: { name: address.company, address: address.street, zip: address.zip, city: address.city, country: 'CH' },
-    reference: invoice.reference,
-    message: `Rechnung ${invoice.number}`,
-  }, { language: 'DE' })
+  const qrBill = new SwissQRBill(qrBillData(args), { language: 'DE' })
 
   const doc = new PDFDocument({ size: 'A4', margin: mm2pt(20), info: { Title: `Rechnung ${invoice.number}`, Author: senderLine(creditor) } })
   const chunks: Uint8Array[] = []
