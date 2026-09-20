@@ -11,7 +11,7 @@ import PDFDocument from 'pdfkit'
 import { SwissQRBill } from 'swissqrbill/pdf'
 import { formatReference, mm2pt } from 'swissqrbill/utils'
 import { addDays, splitStreet } from './invoice.ts'
-import { BUSINESS_VEHICLE_YEARLY_CHF } from './plans.ts'
+import { BUSINESS_VEHICLE_YEARLY_CHF, PRIVATE_MAX_VEHICLES, PRIVATE_YEARLY_CHF } from './plans.ts'
 
 export type { Creditor } from './invoice.ts'
 
@@ -30,6 +30,23 @@ function senderLine(c: Creditor): string {
 }
 
 /**
+ * Die beiden Zeilen der Rechnungsposition: Titel mit Laufzeit, darunter die Rechnung des Betrags. Privatkunden
+ * zahlen einen Preis fürs Konto, Betriebe pro Fahrzeug; ab sechs Fahrzeugen gilt auch privat der Fahrzeugpreis.
+ */
+export function invoiceLines(invoice: InvoiceRecord, brand: string): [title: string, detail: string] {
+  const lastDay = addDays(invoice.periodEnd, -1)
+  const audience = invoice.audience ?? 'betrieb'
+  const label = audience === 'privat' ? 'Privat' : 'Betrieb'
+  const vehicles = `${invoice.vehicles} ${invoice.vehicles === 1 ? 'Fahrzeug' : 'Fahrzeuge'}`
+  const perVehicle = `${vehicles} × ${formatChf(BUSINESS_VEHICLE_YEARLY_CHF)} pro Jahr`
+  const flat = `${vehicles}, bis ${PRIVATE_MAX_VEHICLES} Fahrzeuge ${formatChf(PRIVATE_YEARLY_CHF)} im Jahr`
+  return [
+    `${brand} Jahresabo ${label}, ${formatDay(invoice.periodStart)} bis ${formatDay(lastDay)}`,
+    audience === 'privat' && invoice.vehicles <= PRIVATE_MAX_VEHICLES ? flat : perVehicle,
+  ]
+}
+
+/**
  * Daten des QR-Zahlteils. Strasse und Hausnummer stehen getrennt (`address` und `buildingNumber`), wie es die
  * Swiss Payment Standards verlangen: sonst erfasst die Post Einzahlungen am Schalter kostenpflichtig nach.
  */
@@ -41,7 +58,8 @@ export function qrBillData(args: { creditor: Creditor, address: BillingAddress, 
     amount: invoice.amount,
     currency: 'CHF',
     creditor: { account: creditor.iban, name: senderLine(creditor), address: from.street, buildingNumber: from.buildingNumber, zip: creditor.zip, city: creditor.city, country: 'CH' },
-    debtor: { name: address.company, address: to.street, buildingNumber: to.buildingNumber, zip: address.zip, city: address.city, country: 'CH' },
+    // Ohne Firma zahlt eine Privatperson, dann trägt ihr Name den Zahlteil
+    debtor: { name: address.company || address.contact, address: to.street, buildingNumber: to.buildingNumber, zip: address.zip, city: address.city, country: 'CH' },
     reference: invoice.reference,
     message: `Rechnung ${invoice.number}`,
   }
@@ -72,8 +90,8 @@ export async function renderInvoicePdf(args: { creditor: Creditor, address: Bill
     .text([creditor.email, creditor.website].filter(Boolean).join(' · '))
   doc.fillColor('#000000')
 
-  // Rechnungsadresse im rechten Fenster eines C5-Couverts
-  doc.fontSize(11).text([address.company, address.contact, address.street, `${address.zip} ${address.city}`].join('\n'), mm2pt(118), mm2pt(50), { width: mm2pt(72) })
+  // Rechnungsadresse im rechten Fenster eines C5-Couverts; ohne Firma steht der Name allein (Privatkunden)
+  doc.fontSize(11).text([address.company, address.contact, address.street, `${address.zip} ${address.city}`].filter(Boolean).join('\n'), mm2pt(118), mm2pt(50), { width: mm2pt(72) })
 
   // Titel und Eckdaten
   doc.font('Helvetica-Bold').fontSize(14).text(`Rechnung ${invoice.number}`, left, mm2pt(90))
@@ -92,14 +110,14 @@ export async function renderInvoicePdf(args: { creditor: Creditor, address: Bill
   }
 
   // Position
-  const lastDay = addDays(invoice.periodEnd, -1)
+  const [title, detail] = invoiceLines(invoice, creditor.brand ?? 'Wartungsheft')
   const tableTop = doc.y + mm2pt(8)
   doc.font('Helvetica-Bold').text('Beschreibung', left, tableTop).text('Betrag', left, tableTop, { width, align: 'right' })
   doc.moveTo(left, doc.y + 2).lineTo(left + width, doc.y + 2).strokeColor('#999999').stroke()
   const rowTop = doc.y + mm2pt(3)
   doc.font('Helvetica')
-    .text(`${creditor.brand ?? 'Wartungsheft'} Jahresabo Betrieb, ${formatDay(invoice.periodStart)} bis ${formatDay(lastDay)}`, left, rowTop, { width: mm2pt(130) })
-    .text(`${invoice.vehicles} ${invoice.vehicles === 1 ? 'Fahrzeug' : 'Fahrzeuge'} × ${formatChf(BUSINESS_VEHICLE_YEARLY_CHF)} pro Jahr`, { width: mm2pt(130) })
+    .text(title, left, rowTop, { width: mm2pt(130) })
+    .text(detail, { width: mm2pt(130) })
   doc.text(formatChf(invoice.amount), left, rowTop, { width, align: 'right' })
   const totalTop = doc.y + mm2pt(6)
   doc.moveTo(left, totalTop - 4).lineTo(left + width, totalTop - 4).stroke()

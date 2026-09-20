@@ -1,3 +1,4 @@
+import type { Audience } from '../plans.ts'
 import type { BillingAddress, InvoiceRecord } from '../invoice.ts'
 import type { Usage } from '../limits.ts'
 
@@ -14,6 +15,8 @@ export interface Subscription {
   billing?: 'stripe' | 'invoice'
   /** Nur Jahresrechnung: Rechnungsadresse, abgerechnete Fahrzeuge, Kündigung auf Ende der Laufzeit, Rechnungen */
   billingAddress?: BillingAddress
+  /** Preisliste des Kunden, entscheidet über Preis und Plan bei der Verlängerung; fehlt = Betrieb */
+  audience?: Audience
   vehicles?: number
   cancelAtPeriodEnd?: boolean
   /** Laufzeit ergibt sich aus der letzten Rechnung (`periodEnd`) */

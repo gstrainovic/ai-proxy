@@ -116,7 +116,9 @@ function billingInfo(sub: Subscription) {
   const open = openInvoices(sub)[0]
   return {
     method: 'invoice' as const,
+    audience: sub.audience ?? 'betrieb',
     company: sub.billingAddress?.company ?? '',
+    contact: sub.billingAddress?.contact ?? '',
     vehicles: sub.vehicles ?? 0,
     periodEnd: periodEnd(sub) ?? null,
     cancelAtPeriodEnd: !!sub.cancelAtPeriodEnd,
@@ -384,6 +386,19 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
         chatTokens: Number(body.usage?.chatTokens ?? 0),
       })
       return c.json({ ok: true })
+    })
+
+    // Testzeit zurückdatieren (E2E: Hinweis und Mail vor Ablauf)
+    app.put('/test/trial', async (c) => {
+      const user = await resolveUser(c, deps)
+      if (!user)
+        return c.json({ error: { code: 'unauthorized', message: 'Nicht angemeldet.' } }, 401)
+      const body = await c.req.json<{ daysUsed?: number }>().catch(() => ({} as { daysUsed?: number }))
+      const daysUsed = Number(body.daysUsed ?? 0)
+      const sub = await subscriptionWithTrial(deps.store, user.id)
+      const startedAt = new Date(Date.now() - daysUsed * 86_400_000).toISOString()
+      await deps.store.setSubscription(user.id, { ...sub, status: 'trial', trialStartedAt: startedAt })
+      return c.json({ ok: true, trialStartedAt: startedAt })
     })
   }
 

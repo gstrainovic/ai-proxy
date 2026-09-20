@@ -3,12 +3,14 @@
  * Reine Funktionen: Bestellung prüfen, Rechnungsnummer und Zahlungsreferenz bilden, Rechnung anlegen.
  * PDF und Versand liegen in invoice-pdf.ts und invoice-mail.ts, der Ablauf des Abos in invoice-subscription.ts.
  */
+import type { Audience } from './plans.ts'
 import { calculateQRReferenceChecksum, calculateSCORReferenceChecksum, isQRIBAN } from 'swissqrbill/utils'
 import { yearlyPriceChf } from './plans.ts'
 
 export const PAYMENT_DAYS = 30
 
 export interface BillingAddress {
+  /** Firma; bei Privatkunden leer, dann trägt `contact` die Rechnung */
   company: string
   contact: string
   street: string
@@ -38,6 +40,8 @@ export interface Creditor {
 
 export interface Order extends BillingAddress {
   vehicles: number
+  /** Preisliste: Privat 25 CHF bis 5 Fahrzeuge, Betrieb 36 CHF pro Fahrzeug (plans.ts) */
+  audience: Audience
 }
 
 export interface InvoiceRecord {
@@ -54,17 +58,27 @@ export interface InvoiceRecord {
   paidAt?: string
   /** Buchungsreferenz der Bank (`AcctSvcrRef` aus camt.054), gesetzt bei einer Zahlung aus dem Kontoauszug */
   bankRef?: string
+  /** Preisliste der Rechnung; fehlt bei Rechnungen aus der Zeit vor den Privatabos (dann Betrieb) */
+  audience?: Audience
 }
 
 export type OrderField = keyof Order | 'acceptTerms'
 export type ParseResult = { ok: true, order: Order } | { ok: false, errors: Partial<Record<OrderField, string>> }
 
-const REQUIRED: [keyof BillingAddress, string][] = [
-  ['company', 'Firma fehlt.'],
-  ['contact', 'Kontaktperson fehlt.'],
-  ['street', 'Strasse und Nummer fehlen.'],
-  ['city', 'Ort fehlt.'],
-]
+const REQUIRED: Record<Audience, [keyof BillingAddress, string][]> = {
+  betrieb: [
+    ['company', 'Firma fehlt.'],
+    ['contact', 'Kontaktperson fehlt.'],
+    ['street', 'Strasse und Nummer fehlen.'],
+    ['city', 'Ort fehlt.'],
+  ],
+  // Privat: keine Firma, der Name steht auf der Rechnung
+  privat: [
+    ['contact', 'Name fehlt.'],
+    ['street', 'Strasse und Nummer fehlen.'],
+    ['city', 'Ort fehlt.'],
+  ],
+}
 
 function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -75,7 +89,8 @@ export function parseOrder(body: unknown): ParseResult {
     return { ok: false, errors: { company: 'Bestellung fehlt.' } }
   const b = body as Record<string, unknown>
   const errors: Partial<Record<OrderField, string>> = {}
-  for (const [field, message] of REQUIRED) {
+  const audience: Audience = b.audience === 'privat' ? 'privat' : 'betrieb'
+  for (const [field, message] of REQUIRED[audience]) {
     if (!text(b[field]))
       errors[field] = message
   }
@@ -96,7 +111,8 @@ export function parseOrder(body: unknown): ParseResult {
   return {
     ok: true,
     order: {
-      company: text(b.company),
+      audience,
+      company: audience === 'privat' ? '' : text(b.company),
       contact: text(b.contact),
       street: text(b.street),
       zip,
@@ -183,12 +199,14 @@ export function invoiceReference(number: string, iban: string): string {
   return `RF${calculateSCORReferenceChecksum(plain)}${plain}`
 }
 
-export function createInvoice(args: { userId: string, vehicles: number, issueDate: string, periodStart: string, iban: string }): InvoiceRecord {
+export function createInvoice(args: { userId: string, vehicles: number, issueDate: string, periodStart: string, iban: string, audience?: Audience }): InvoiceRecord {
   const number = invoiceNumber(args.userId, args.issueDate)
+  const audience = args.audience ?? 'betrieb'
   return {
     number,
+    audience,
     reference: invoiceReference(number, args.iban),
-    amount: yearlyPriceChf(args.vehicles, 'betrieb'),
+    amount: yearlyPriceChf(args.vehicles, audience),
     vehicles: args.vehicles,
     issuedAt: args.issueDate,
     dueAt: addDays(args.issueDate, PAYMENT_DAYS),

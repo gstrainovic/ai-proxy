@@ -68,6 +68,7 @@ export class InstantStore implements Store {
     }
     if (row.billing) {
       sub.billing = row.billing
+      sub.audience = row.audience ?? undefined
       sub.billingAddress = row.billingAddress ?? undefined
       sub.vehicles = row.vehicles ?? undefined
       sub.cancelAtPeriodEnd = !!row.cancelAtPeriodEnd
@@ -99,6 +100,7 @@ export class InstantStore implements Store {
       stripeSubscriptionId: sub.stripeSubscriptionId ?? null,
       currentPeriodEnd: sub.currentPeriodEnd ?? null,
       billing: sub.billing ?? null,
+      audience: sub.audience ?? null,
       billingAddress: sub.billingAddress ?? null,
       vehicles: sub.vehicles ?? null,
       cancelAtPeriodEnd: sub.cancelAtPeriodEnd ?? null,

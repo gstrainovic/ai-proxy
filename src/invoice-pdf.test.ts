@@ -1,7 +1,7 @@
 import type { Creditor } from './invoice-pdf.ts'
 import { describe, expect, it } from 'vitest'
 import { createInvoice } from './invoice.ts'
-import { formatChf, formatDay, qrBillData, renderInvoicePdf } from './invoice-pdf.ts'
+import { formatChf, formatDay, invoiceLines, qrBillData, renderInvoicePdf } from './invoice-pdf.ts'
 
 const creditor: Creditor = {
   name: 'Goran Strainovic',
@@ -61,5 +61,26 @@ describe('qrBillData', () => {
     const data = qrBillData({ creditor: { ...creditor, street: 'Postfach' }, address, invoice })
     expect(data.creditor.address).toBe('Postfach')
     expect(data.creditor.buildingNumber).toBeUndefined()
+  })
+})
+
+describe('invoiceLines', () => {
+  it('Betrieb: Fahrzeugzahl und Preis pro Fahrzeug', () => {
+    const invoice = createInvoice({ userId: 'user-a', vehicles: 3, issueDate: '2026-09-20', periodStart: '2026-09-20', iban: creditor.iban })
+    const [title, detail] = invoiceLines(invoice, 'Wartungsheft')
+    expect(title).toBe('Wartungsheft Jahresabo Betrieb, 20.09.2026 bis 19.09.2027')
+    expect(detail).toBe('3 Fahrzeuge × CHF 36.00 pro Jahr')
+  })
+
+  it('Privat: ein Preis fürs Konto, Fahrzeuge als Zusatz', () => {
+    const invoice = createInvoice({ userId: 'user-p', vehicles: 2, issueDate: '2026-09-20', periodStart: '2026-09-20', iban: creditor.iban, audience: 'privat' })
+    const [title, detail] = invoiceLines(invoice, 'Wartungsheft')
+    expect(title).toBe('Wartungsheft Jahresabo Privat, 20.09.2026 bis 19.09.2027')
+    expect(detail).toBe('2 Fahrzeuge, bis 5 Fahrzeuge CHF 25.00 im Jahr')
+  })
+
+  it('Privat mit mehr als fünf Fahrzeugen rechnet pro Fahrzeug ab', () => {
+    const invoice = createInvoice({ userId: 'user-p', vehicles: 6, issueDate: '2026-09-20', periodStart: '2026-09-20', iban: creditor.iban, audience: 'privat' })
+    expect(invoiceLines(invoice, 'Wartungsheft')[1]).toBe('6 Fahrzeuge × CHF 36.00 pro Jahr')
   })
 })

@@ -15,6 +15,7 @@ import {
 const IBAN = 'CH93 0076 2011 6238 5295 7'
 
 const order: Order = {
+  audience: 'betrieb',
   company: 'Muster Sanitär AG',
   contact: 'Petra Muster',
   street: 'Hauptstrasse 12',
@@ -186,5 +187,45 @@ describe('Zahlungen', () => {
     expect(overdueInvoices(sub, '2026-10-20')).toHaveLength(1)
     const paid = markInvoicePaid(sub, sub.invoices![0]!.reference, '2026-10-25')
     expect(overdueInvoices(paid, '2026-10-26')).toEqual([])
+  })
+})
+
+describe('Privatkunde auf Rechnung', () => {
+  const privateOrder: Order = {
+    audience: 'privat',
+    company: '',
+    contact: 'Anna Beispiel',
+    street: 'Dorfstrasse 4',
+    zip: '9000',
+    city: 'St. Gallen',
+    email: 'anna@beispiel.ch',
+    vehicles: 2,
+  }
+
+  function orderedPrivate(today = '2026-09-19', vehicles = 2) {
+    const result = orderSubscription({ existing: null, order: { ...privateOrder, vehicles }, userId: 'user-p', today, iban: IBAN })
+    if ('error' in result)
+      throw new Error(result.error)
+    return result
+  }
+
+  it('Plan privat, 25 CHF im Jahr, sonst derselbe Ablauf', () => {
+    const { sub, invoice } = orderedPrivate('2026-09-19')
+    expect(sub).toMatchObject({ plan: 'privat', status: 'active', billing: 'invoice', vehicles: 2 })
+    expect(invoice.amount).toBe(25)
+    expect(invoice.audience).toBe('privat')
+    expect(sub.billingAddress).toMatchObject({ contact: 'Anna Beispiel', company: '' })
+  })
+
+  it('die Verlängerung bleibt bei der Preisliste des Kunden', () => {
+    const { sub } = orderedPrivate('2026-09-19')
+    const renewed = renewSubscription({ sub, userId: 'user-p', vehicles: 3, today: '2027-08-20', iban: IBAN })
+    expect(renewed.invoices!.at(-1)).toMatchObject({ amount: 25, audience: 'privat' })
+  })
+
+  it('ab sechs Fahrzeugen gilt der Preis pro Fahrzeug, der Plan wird Betrieb', () => {
+    const { sub, invoice } = orderedPrivate('2026-09-19', 6)
+    expect(invoice.amount).toBe(216)
+    expect(sub.plan).toBe('betrieb')
   })
 })

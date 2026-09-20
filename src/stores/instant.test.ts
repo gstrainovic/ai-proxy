@@ -49,6 +49,7 @@ describe.skipIf(!reachable)('instantStore (integration, local InstantDB)', () =>
       status: 'active' as const,
       trialStartedAt: '2026-08-01T08:00:00.000Z',
       billing: 'invoice' as const,
+      audience: 'privat' as const,
       billingAddress: { company: 'Muster AG', contact: 'Petra Muster', street: 'Hauptstrasse 12', zip: '9000', city: 'St. Gallen', email: 'b@muster.ch' },
       vehicles: 5,
       cancelAtPeriodEnd: false,

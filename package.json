@@ -29,7 +29,8 @@
     "./stores/instant": "./src/stores/instant.ts",
     "./stores/memory": "./src/stores/memory.ts",
     "./stores/supabase": "./src/stores/supabase.ts",
-    "./stores/types": "./src/stores/types.ts"
+    "./stores/types": "./src/stores/types.ts",
+    "./trial": "./src/trial.ts"
   },
   "files": [
     "src",

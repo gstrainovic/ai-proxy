@@ -6,8 +6,7 @@
 import type { InvoiceNotice } from './app.ts'
 import type { Creditor, InvoiceRecord } from './invoice.ts'
 import { Buffer } from 'node:buffer'
-import { addDays } from './invoice.ts'
-import { formatChf, formatDay, renderInvoicePdf } from './invoice-pdf.ts'
+import { formatChf, formatDay, invoiceLines, renderInvoicePdf } from './invoice-pdf.ts'
 
 export interface ResendNotifierConfig {
   token: string
@@ -25,8 +24,8 @@ function invoiceText(invoice: InvoiceRecord, creditor: Creditor, appUrl: string,
   return [
     `Guten Tag ${contact}`,
     '',
-    `im Anhang die Rechnung ${invoice.number} für ${creditor.brand ?? 'Wartungsheft'}, Jahresabo Betrieb mit ${invoice.vehicles} ${invoice.vehicles === 1 ? 'Fahrzeug' : 'Fahrzeugen'}, `
-    + `Laufzeit ${formatDay(invoice.periodStart)} bis ${formatDay(addDays(invoice.periodEnd, -1))}.`,
+    `im Anhang die Rechnung ${invoice.number}: ${invoiceLines(invoice, creditor.brand ?? 'Wartungsheft')[0]}, `
+    + `${invoice.vehicles} ${invoice.vehicles === 1 ? 'Fahrzeug' : 'Fahrzeuge'}.`,
     '',
     `Betrag: ${formatChf(invoice.amount)}, zahlbar bis ${formatDay(invoice.dueAt)} mit dem QR-Zahlteil im PDF.`,
     '',

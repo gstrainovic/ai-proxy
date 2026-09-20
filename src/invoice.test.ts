@@ -138,3 +138,53 @@ describe('splitStreet', () => {
     expect(splitStreet('  Bahnstrasse ,  9b ')).toEqual({ street: 'Bahnstrasse', buildingNumber: '9b' })
   })
 })
+
+describe('parseOrder: Privatkunde', () => {
+  const privateOrder = {
+    audience: 'privat',
+    contact: 'Anna Beispiel',
+    street: 'Dorfstrasse 4',
+    zip: '9000',
+    city: 'St. Gallen',
+    email: 'anna@beispiel.ch',
+    vehicles: 2,
+    acceptTerms: true,
+  }
+
+  it('nimmt eine Bestellung ohne Firma an, der Name trägt die Rechnung', () => {
+    const result = parseOrder(privateOrder)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.order.audience).toBe('privat')
+      expect(result.order.contact).toBe('Anna Beispiel')
+      expect(result.order.company).toBe('')
+    }
+  })
+
+  it('verlangt den Namen', () => {
+    const result = parseOrder({ ...privateOrder, contact: ' ' })
+    expect(result.ok).toBe(false)
+    if (!result.ok)
+      expect(result.errors.contact).toBeTruthy()
+  })
+
+  it('ohne Angabe bleibt es eine Bestellung für Betriebe, dort ist die Firma Pflicht', () => {
+    const result = parseOrder({ ...privateOrder, audience: undefined })
+    expect(result.ok).toBe(false)
+    if (!result.ok)
+      expect(result.errors.company).toBeTruthy()
+  })
+})
+
+describe('createInvoice für Privatkunden', () => {
+  it('25 CHF im Jahr bis fünf Fahrzeuge', () => {
+    const invoice = createInvoice({ userId: 'user-p', vehicles: 3, issueDate: '2026-09-20', periodStart: '2026-09-20', iban: IBAN, audience: 'privat' })
+    expect(invoice.amount).toBe(25)
+    expect(invoice.audience).toBe('privat')
+  })
+
+  it('ab sechs Fahrzeugen gilt der Preis pro Fahrzeug', () => {
+    const invoice = createInvoice({ userId: 'user-p', vehicles: 6, issueDate: '2026-09-20', periodStart: '2026-09-20', iban: IBAN, audience: 'privat' })
+    expect(invoice.amount).toBe(216)
+  })
+})

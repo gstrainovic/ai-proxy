@@ -7,6 +7,7 @@
 import type { InvoiceRecord, Order } from './invoice.ts'
 import type { Subscription } from './stores/types.ts'
 import { addDays, createInvoice, isoDate } from './invoice.ts'
+import { planForVehicles } from './plans.ts'
 import { TRIAL_DAYS } from './trial.ts'
 
 export const RENEWAL_LEAD_DAYS = 30
@@ -45,10 +46,11 @@ export function orderSubscription(args: { existing: Subscription | null, order: 
     return { error: 'already_active' }
   const end = trialEnd(existing)
   const periodStart = end && end > today ? end : today
-  const invoice = createInvoice({ userId, vehicles: order.vehicles, issueDate: today, periodStart, iban })
-  const { vehicles, ...billingAddress } = order
+  const invoice = createInvoice({ userId, vehicles: order.vehicles, issueDate: today, periodStart, iban, audience: order.audience })
+  const { vehicles, audience, ...billingAddress } = order
   const sub: Subscription = {
-    plan: 'betrieb',
+    plan: planForVehicles(vehicles, audience).id,
+    audience,
     status: 'active',
     ...(existing?.trialStartedAt ? { trialStartedAt: existing.trialStartedAt } : {}),
     billing: 'invoice',
@@ -88,8 +90,10 @@ export function renewalDue(sub: Subscription, today: string): boolean {
 export function renewSubscription(args: { sub: Subscription, userId: string, vehicles: number, today: string, iban: string }): Subscription {
   const { sub, userId, today, iban } = args
   const vehicles = Math.max(1, args.vehicles)
-  const invoice = createInvoice({ userId, vehicles, issueDate: today, periodStart: periodEnd(sub)!, iban })
-  return { ...sub, vehicles, invoices: [...(sub.invoices ?? []), invoice] }
+  // Die Preisliste bleibt die des Kunden; Abos aus der Zeit vor den Privatabos haben kein Feld und sind Betriebe
+  const audience = sub.audience ?? 'betrieb'
+  const invoice = createInvoice({ userId, vehicles, issueDate: today, periodStart: periodEnd(sub)!, iban, audience })
+  return { ...sub, vehicles, plan: planForVehicles(vehicles, audience).id, invoices: [...(sub.invoices ?? []), invoice] }
 }
 
 /**
