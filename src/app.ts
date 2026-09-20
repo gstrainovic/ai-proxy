@@ -8,6 +8,7 @@ import { DEFAULT_CATALOG, LIMIT_LABELS, yearlyPriceChf } from './plans.ts'
 import type { InvoiceRecord } from './invoice.ts'
 import type { TrialState } from './trial.ts'
 import { createCheckout, createPortal, handleWebhook, notConfigured } from './billing.ts'
+import { feedbackMail, parseFeedback } from './feedback.ts'
 import { isoDate, parseOrder } from './invoice.ts'
 import { cancelSubscription, effectiveSubscription, markInvoicePaid, openInvoices, orderSubscription, periodEnd, renewalDue, renewSubscription, resumeSubscription } from './invoice-subscription.ts'
 import { checkLimit, currentMonth, resolvePlan } from './limits.ts'
@@ -16,6 +17,8 @@ import { startTrial, trialState } from './trial.ts'
 
 export interface AuthUser {
   id: string
+  /** E-Mail des Kontos, falls die Token-Prüfung sie mitliefert; nur für Rückmeldungen genutzt */
+  email?: string | null
   /** Aufruf eines eigenen Server-Prozesses mit AI_PROXY_INTERNAL_TOKEN (Jobs), nicht des Nutzers selbst */
   internal?: boolean
 }
@@ -43,12 +46,29 @@ export interface AppDeps {
   internalToken?: string
   /** Jahresabo auf Rechnung (Betriebe); null/undefined = nicht konfiguriert (Endpoints antworten 501). */
   invoicing?: InvoicingDeps | null
+  /** Rückmeldungen aus der App; null/undefined = nicht konfiguriert (Endpoint antwortet 501). */
+  feedback?: FeedbackDeps | null
 }
 
 /** Ereignis für Mail an Kunde und Betreiber: neue Rechnung oder stornierte Rechnungen nach Kündigung */
 export type InvoiceNotice =
   | { type: 'invoice', userId: string, sub: Subscription, invoice: InvoiceRecord }
   | { type: 'voided', userId: string, sub: Subscription, invoices: InvoiceRecord[] }
+
+/** Rückmeldung aus der App an den Betreiber; die Aufnahme hängt als Datei an */
+export interface FeedbackNotice {
+  subject: string
+  text: string
+  /** Antwortadresse, falls das Konto eine hat */
+  replyTo?: string | null
+  audio?: { filename: string, contentType: string, bytes: Uint8Array }
+}
+
+export interface FeedbackDeps {
+  notify: (notice: FeedbackNotice) => Promise<void>
+  /** Modell für die Transkription; Default voxtral-mini-latest */
+  transcribeModel?: string
+}
 
 export interface InvoicingDeps {
   /** IBAN oder QR-IBAN des Empfängers; bestimmt die Art der Zahlungsreferenz */
@@ -370,6 +390,54 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
     return c.json({ billing: billingInfo(next) })
   })
 
+  /**
+   * Rückmeldung aus der App: Text, Sprachnachricht oder beides. Die Aufnahme wird bei Mistral transkribiert
+   * (Voxtral), damit der Betreiber liest statt abhört; scheitert das, geht die Aufnahme trotzdem raus.
+   */
+  app.post('/feedback', async (c) => {
+    const user = await resolveUser(c, deps)
+    if (!user)
+      return c.json({ error: { code: 'unauthorized', message: 'Nicht angemeldet.' } }, 401)
+    if (!deps.feedback)
+      return notConfigured(c)
+
+    const form = await c.req.formData().catch(() => null)
+    if (!form)
+      return c.json({ error: { code: 'invalid_feedback', message: 'Rückmeldung fehlt.' } }, 400)
+
+    const datei = form.get('audio')
+    const audio = datei instanceof File ? datei : null
+    const parsed = parseFeedback({
+      text: String(form.get('text') ?? ''),
+      page: String(form.get('page') ?? '') || undefined,
+      audioBytes: audio?.size,
+    })
+    if (!parsed.ok)
+      return c.json({ error: { code: 'invalid_feedback', message: parsed.error } }, 400)
+
+    let transcript: string | undefined
+    let bytes: Uint8Array | undefined
+    if (audio) {
+      bytes = new Uint8Array(await audio.arrayBuffer())
+      transcript = await transcribe(deps, bytes, audio.name, audio.type)
+    }
+
+    const mail = feedbackMail({
+      userId: user.id,
+      email: user.email,
+      text: parsed.feedback.text,
+      transcript,
+      page: parsed.feedback.page,
+      app: String(form.get('app') ?? '') || undefined,
+    })
+    await deps.feedback.notify({
+      ...mail,
+      replyTo: user.email,
+      ...(audio && bytes ? { audio: { filename: audio.name || 'nachricht.webm', contentType: audio.type || 'audio/webm', bytes } } : {}),
+    })
+    return c.json({ ok: true, transcript: transcript ?? null })
+  })
+
   app.post('/billing/checkout', c => (deps.billing ? createCheckout(c, deps.billing, deps.store, c.get('user').id, catalog) : notConfigured(c)))
   app.post('/billing/portal', c => (deps.billing ? createPortal(c, deps.billing, deps.store, c.get('user').id) : notConfigured(c)))
   // Stripe ruft ohne Nutzer-Token auf, Authentizität kommt aus der Signatur
@@ -404,4 +472,25 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
   }
 
   return app
+}
+
+/** Transkript der Sprachnachricht; bei einem Fehler undefined, die Rückmeldung geht dann ohne Text raus */
+async function transcribe(deps: AppDeps, bytes: Uint8Array, filename: string, contentType: string): Promise<string | undefined> {
+  try {
+    const form = new FormData()
+    form.append('file', new Blob([bytes as BlobPart], { type: contentType || 'audio/webm' }), filename || 'nachricht.webm')
+    form.append('model', deps.feedback?.transcribeModel ?? 'voxtral-mini-latest')
+    const res = await deps.mistralFetch(`${deps.mistralBaseUrl}/audio/transcriptions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${deps.mistralApiKey}` },
+      body: form,
+    })
+    if (!res.ok)
+      return undefined
+    const body = await res.json() as { text?: string }
+    return body.text?.trim() || undefined
+  }
+  catch {
+    return undefined
+  }
 }

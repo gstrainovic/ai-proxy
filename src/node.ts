@@ -4,7 +4,7 @@
  * Backend nach Umgebung: InstantDB (INSTANT_APP_ID + INSTANT_ADMIN_TOKEN) oder Supabase (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY).
  * Start: node --env-file-if-exists=.env src/node.ts — Produktion: Docker-Image (siehe Dockerfile) mit gesetzten Umgebungsvariablen.
  */
-import type { InvoiceNotice } from './app.ts'
+import type { FeedbackNotice, InvoiceNotice } from './app.ts'
 import type { Store } from './stores/types.ts'
 import process from 'node:process'
 import { serve } from '@hono/node-server'
@@ -13,6 +13,7 @@ import { createApp } from './app.ts'
 import { createVerifyToken as createInstantVerifyToken } from './auth/instant.ts'
 import { createVerifyToken as createSupabaseVerifyToken } from './auth/supabase.ts'
 import { loadConfig } from './config.ts'
+import { createFeedbackNotifier } from './feedback.ts'
 import { createResendNotifier } from './invoice-mail.ts'
 import { InstantStore } from './stores/instant.ts'
 import { SupabaseStore } from './stores/supabase.ts'
@@ -54,6 +55,20 @@ const invoicing = invoicingConfig
     }
   : null
 
+/**
+ * Rückmeldungen aus der App. Absender und Postfach kommen aus der Rechnungs-Konfiguration, damit nur ein Satz
+ * Adressen gepflegt wird; ohne RESEND_TOKEN landet die Rückmeldung im Log statt im Postfach.
+ */
+const feedback = invoicingConfig
+  ? {
+      notify: invoicingConfig.resendToken
+        ? createFeedbackNotifier({ token: invoicingConfig.resendToken, from: invoicingConfig.from, to: invoicingConfig.creditor.email })
+        : async (notice: FeedbackNotice) => {
+          console.warn(`[ai-proxy] Rückmeldung (kein RESEND_TOKEN, nicht versandt): ${notice.subject}\n${notice.text}`)
+        },
+    }
+  : null
+
 const app = createApp({
   mistralApiKey: config.mistralApiKey,
   mistralBaseUrl: config.mistralBaseUrl,
@@ -66,6 +81,7 @@ const app = createApp({
   billing,
   internalToken: config.internalToken || undefined,
   invoicing,
+  feedback,
 })
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {

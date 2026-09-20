@@ -19,6 +19,7 @@
     "./billing": "./src/billing.ts",
     "./camt": "./src/camt.ts",
     "./config": "./src/config.ts",
+    "./feedback": "./src/feedback.ts",
     "./edge": "./src/edge.ts",
     "./invoice": "./src/invoice.ts",
     "./invoice-mail": "./src/invoice-mail.ts",
