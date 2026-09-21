@@ -1,0 +1,5 @@
+# LF überall, auch unter Windows mit core.autocrlf=true: npm stellt die bin-Datei src/node.ts beim Install auf LF um,
+# mit CRLF im Arbeitsverzeichnis stünde sie danach jedes Mal als geändert da. Der Proxy läuft ohnehin unter Linux.
+* text=auto eol=lf
+# Bank-Muster bleiben byte-genau, wie geliefert (das PostFinance-Muster hat CRLF)
+src/fixtures/camt054-postfinance-muster.xml -text
