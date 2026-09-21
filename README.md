@@ -1,6 +1,6 @@
 # ai-proxy
 
-Kleiner Server zwischen App und Mistral-API. Er hält den Mistral-Key, zählt den Verbrauch pro Nutzer und Monat, setzt Plan-Limits durch und wickelt Abos über Stripe ab. Genutzt von [auto-service](https://github.com/gstrainovic/auto-service) und [dms](https://github.com/gstrainovic/dms), je mit eigener Instanz.
+Kleiner Server zwischen App und Mistral-API. Er hält den Mistral-Key, zählt den Verbrauch pro Nutzer und Monat, setzt Plan-Limits durch und wickelt Abos über Stripe ab. Genutzt von [wartungsheft](https://github.com/gstrainovic/wartungsheft) und [dms](https://github.com/gstrainovic/dms), je mit eigener Instanz.
 
 ## Endpunkte
 
