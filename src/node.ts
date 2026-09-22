@@ -15,6 +15,7 @@ import { createVerifyToken as createSupabaseVerifyToken } from './auth/supabase.
 import { loadConfig } from './config.ts'
 import { createFeedbackNotifier } from './feedback.ts'
 import { createResendNotifier } from './invoice-mail.ts'
+import { createInvoiceRequestNotifier } from './invoice-request.ts'
 import { InstantStore } from './stores/instant.ts'
 import { SupabaseStore } from './stores/supabase.ts'
 
@@ -41,19 +42,31 @@ const billing = config.stripeSecretKey && config.stripeWebhookSecret
     }
   : null
 
-// Jahresrechnung (Betriebe): ohne RESEND_TOKEN nur protokollieren, damit lokal und in E2E nichts verschickt wird
+// Jahresrechnung: mit IBAN als QR-Rechnung an den Kunden, ohne IBAN als Auftrag an den Betreiber, der sie von Hand
+// schreibt (invoice-request.ts). Ohne RESEND_TOKEN nur protokollieren, damit lokal und in E2E nichts verschickt wird.
+function logNotice(notice: InvoiceNotice): Promise<void> {
+  const numbers = notice.type === 'invoice' ? notice.invoice.number : notice.invoices.map(i => i.number).join(', ')
+  console.warn(`[ai-proxy] ${notice.type === 'invoice' ? 'Rechnung' : 'Storno'} ${numbers} für ${notice.userId} (kein RESEND_TOKEN, nicht versandt)`)
+  return Promise.resolve()
+}
 const invoicingConfig = config.invoicing
+const requests = config.invoiceRequests
 const invoicing = invoicingConfig
   ? {
       iban: invoicingConfig.creditor.iban,
       notify: invoicingConfig.resendToken
         ? createResendNotifier({ token: invoicingConfig.resendToken, from: invoicingConfig.from, bcc: invoicingConfig.bcc, creditor: invoicingConfig.creditor, appUrl: config.appUrl })
-        : async (notice: InvoiceNotice) => {
-          const numbers = notice.type === 'invoice' ? notice.invoice.number : notice.invoices.map(i => i.number).join(', ')
-          console.warn(`[ai-proxy] ${notice.type === 'invoice' ? 'Rechnung' : 'Storno'} ${numbers} für ${notice.userId} (kein RESEND_TOKEN, nicht versandt)`)
-        },
+        : logNotice,
     }
-  : null
+  : requests
+    ? {
+        iban: '',
+        manual: true,
+        notify: requests.resendToken
+          ? createInvoiceRequestNotifier({ token: requests.resendToken, from: requests.from, to: requests.to })
+          : logNotice,
+      }
+    : null
 
 /**
  * Rückmeldungen aus der App: FEEDBACK_TO, ersatzweise das Postfach der Rechnung. Bewusst nicht an die IBAN
@@ -86,7 +99,7 @@ const app = createApp({
 })
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {
-  console.warn(`[ai-proxy] läuft auf http://localhost:${info.port} (Backend: ${config.backend})${config.authBypass ? ' (AUTH-BYPASS aktiv, nur lokal!)' : ''}${billing ? '' : ' (Stripe nicht konfiguriert)'}${invoicing ? '' : ' (Jahresrechnung nicht konfiguriert)'}`)
+  console.warn(`[ai-proxy] läuft auf http://localhost:${info.port} (Backend: ${config.backend})${config.authBypass ? ' (AUTH-BYPASS aktiv, nur lokal!)' : ''}${billing ? '' : ' (Stripe nicht konfiguriert)'}${invoicing ? (invoicing.iban ? '' : ` (Rechnung von Hand an ${requests!.to})`) : ' (Jahresrechnung nicht konfiguriert)'}`)
   if (config.authBypass && process.env.NODE_ENV === 'production')
     throw new Error('AI_PROXY_AUTH_BYPASS darf in Produktion nicht gesetzt sein')
 })

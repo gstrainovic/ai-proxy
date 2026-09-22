@@ -34,6 +34,10 @@ Bei erreichtem Limit antwortet der Proxy mit 402 im Mistral-Fehlerformat, sodass
   Aktiv mit `INVOICE_IBAN`, dazu `INVOICE_CREDITOR_NAME`, `INVOICE_STREET`, `INVOICE_ZIP`, `INVOICE_CITY`,
   `INVOICE_EMAIL`, optional `INVOICE_TRADE_NAME`, `INVOICE_BRAND`, `INVOICE_WEBSITE`, `INVOICE_FROM`, `INVOICE_BCC`.
   Ohne `RESEND_TOKEN` wird die Rechnung nur protokolliert.
+- **Rechnung von Hand** (ohne `INVOICE_IBAN`): Bestellungen gehen trotzdem, sobald `INVOICE_EMAIL` oder
+  `FEEDBACK_TO` gesetzt ist. Das Abo entsteht wie oben mit SCOR-Referenz; statt des PDF an den Kunden schickt
+  `src/invoice-request.ts` dem Betreiber den Auftrag, die Rechnung zu schreiben (Nummer, Referenz, Betrag,
+  Fälligkeit, Rechnungsadresse), bei Kündigung die zu stornierenden Rechnungen. `/billing/order` meldet `manual: true`.
 - **Rückmeldungen** aus der App (`/feedback`): Ziel ist `FEEDBACK_TO`, ersatzweise `INVOICE_EMAIL`, Absender
   `FEEDBACK_FROM`. Bewusst unabhängig von der IBAN, damit eine Instanz ohne Rechnungsstellung Fehler und Wünsche
   trotzdem annimmt. Ohne Ziel antwortet `/feedback` mit 501, ohne `RESEND_TOKEN` landet alles im Log. Die Verlängerung läuft als Job in der App (auto-service
