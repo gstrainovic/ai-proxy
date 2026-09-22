@@ -44,6 +44,11 @@ export interface AppDeps {
    * Bearer = internalToken plus Header `x-user-id`. Ohne x-user-id wird abgelehnt.
    */
   internalToken?: string
+  /**
+   * Konto, auf das Verbrauch, Testzeit und Abo einer Person laufen (z. B. ihre Organisation); null = kein Konto (401).
+   * Fehlt die Funktion, ist jede Person ihr eigenes Konto. Interne Aufrufe geben das Konto direkt in x-user-id an.
+   */
+  accountOf?: (user: AuthUser) => Promise<string | null>
   /** Jahresabo auf Rechnung (Betriebe); null/undefined = nicht konfiguriert (Endpoints antworten 501). */
   invoicing?: InvoicingDeps | null
   /** Rückmeldungen aus der App; null/undefined = nicht konfiguriert (Endpoint antwortet 501). */
@@ -87,7 +92,16 @@ interface Variables {
 
 export type App = Hono<{ Variables: Variables }>
 
+/** Angemeldete Person, `id` bereits auf ihr Konto abgebildet (accountOf) */
 async function resolveUser(c: Context, deps: AppDeps): Promise<AuthUser | null> {
+  const user = await resolvePerson(c, deps)
+  if (!user || user.internal || !deps.accountOf)
+    return user
+  const account = await deps.accountOf(user)
+  return account ? { ...user, id: account } : null
+}
+
+async function resolvePerson(c: Context, deps: AppDeps): Promise<AuthUser | null> {
   const header = c.req.header('authorization') ?? ''
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : ''
   if (token && deps.internalToken && token === deps.internalToken) {

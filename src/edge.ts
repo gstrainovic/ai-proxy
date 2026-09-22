@@ -8,9 +8,10 @@
  * Umgebung: MISTRAL_API_KEY (Secret). SUPABASE_URL und SUPABASE_SERVICE_ROLE_KEY setzt Supabase automatisch.
  * Der Service-Role-Key dient zugleich als internes Token: andere Edge Functions rufen den Proxy damit
  * plus Header `x-user-id` im Namen eines Nutzers auf (Pipeline ohne Nutzer-Session).
- * Optional: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_<PLAN>, APP_URL, CORS_ORIGIN.
+ * Optional: AI_PROXY_BURST_LIMIT (Anfragen pro Konto und Minute), STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
+ * STRIPE_PRICE_<PLAN>, APP_URL, CORS_ORIGIN.
  */
-import type { App } from './app.ts'
+import type { App, AppDeps } from './app.ts'
 import type { PlanCatalog } from './plans.ts'
 import Stripe from 'stripe'
 import { createApp } from './app.ts'
@@ -22,6 +23,8 @@ export interface EdgeOptions {
   plans?: PlanCatalog
   /** Name der Edge Function = Pfadpräfix. Default `ai-proxy`. */
   functionName?: string
+  /** Konto einer Person (z. B. ihre Organisation), siehe AppDeps.accountOf */
+  accountOf?: AppDeps['accountOf']
 }
 
 export function createEdgeApp(rawEnv: Record<string, string | undefined>, options: EdgeOptions = {}): App {
@@ -49,10 +52,12 @@ export function createEdgeApp(rawEnv: Record<string, string | undefined>, option
     verifyToken: createVerifyToken(config.supabase).verifyToken,
     store: new SupabaseStore(config.supabase),
     authBypass: false,
+    burstLimit: config.burstLimit,
     mistralFetch: fetch,
     corsOrigin: config.corsOrigin,
     billing,
     plans: options.plans,
     internalToken: config.supabase.serviceRoleKey,
+    accountOf: options.accountOf,
   }, { basePath: `/${functionName}` })
 }
