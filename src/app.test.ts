@@ -339,6 +339,50 @@ describe('internal token (server-to-server calls on behalf of a user)', () => {
   })
 })
 
+describe('konto statt person (accountOf)', () => {
+  const tokens: Record<string, string> = { 'token-anna': 'anna', 'token-ben': 'ben', 'token-ohne': 'ohne-konto' }
+  const konten: Record<string, string> = { anna: 'firma-1', ben: 'firma-1' }
+  const headers = (token: string) => ({ 'Authorization': `Bearer ${token}`, 'content-type': 'application/json' })
+
+  function setupKonten() {
+    return setup({
+      verifyToken: async token => (tokens[token] ? { id: tokens[token] } : null),
+      accountOf: async user => konten[user.id] ?? null,
+      internalToken: 'internal-secret',
+      mistralFetch: async () => mistralResponse({ usage_info: { pages_processed: 3 } }),
+    })
+  }
+
+  it('zählt den Verbrauch aller Mitglieder auf ein gemeinsames Konto', async () => {
+    const { app, store } = setupKonten()
+    await app.request('/v1/ocr', { method: 'POST', headers: headers('token-anna'), body: '{}' })
+    await app.request('/v1/ocr', { method: 'POST', headers: headers('token-ben'), body: '{}' })
+    expect((await store.getUsage('firma-1', currentMonth())).ocrPages).toBe(6)
+    const usage = await (await app.request('/me/usage', { headers: headers('token-ben') })).json()
+    expect(usage.usage.ocrPages).toBe(6)
+  })
+
+  it('führt Testzeit und Abo pro Konto', async () => {
+    const { app, store } = setupKonten()
+    await app.request('/me/usage', { headers: headers('token-anna') })
+    expect(await store.getSubscription('firma-1')).toMatchObject({ status: 'trial' })
+    expect(await store.getSubscription('anna')).toBeNull()
+  })
+
+  it('lehnt Personen ohne Konto ab', async () => {
+    const { app } = setupKonten()
+    const res = await app.request('/me/usage', { headers: headers('token-ohne') })
+    expect(res.status).toBe(401)
+  })
+
+  it('nimmt bei internen Aufrufen x-user-id direkt als Konto', async () => {
+    const { app, store } = setupKonten()
+    const res = await app.request('/v1/ocr', { method: 'POST', headers: { ...headers('internal-secret'), 'x-user-id': 'firma-2' }, body: '{}' })
+    expect(res.status).toBe(200)
+    expect((await store.getUsage('firma-2', currentMonth())).ocrPages).toBe(3)
+  })
+})
+
 describe('fair use', () => {
   it('bremst ab der Schwelle mit 429 und Retry-After', async () => {
     const { app, calls } = setup({ burstLimit: 2 })

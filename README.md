@@ -27,7 +27,10 @@ Bei erreichtem Limit antwortet der Proxy mit 402 im Mistral-Fehlerformat, sodass
 - `src/app.ts` erzeugt die Hono-App. Store, Token-Prüfung, `fetch` und Stripe werden injiziert, deshalb ist die Logik ohne Netz testbar.
 - `src/plans.ts` definiert den Standard-Katalog (auto-service) und den Typ `PlanCatalog`. Jede App kann ihren eigenen Katalog per `createApp(deps.plans)` bzw. `createEdgeApp(env, { plans })` injizieren; unbekannte Pläne fallen auf `defaultPlan` zurück. Stripe-Preise kommen aus `STRIPE_PRICE_<PLAN>` (auto-service: `privat` 25 CHF im Jahr bis 5 Fahrzeuge, `betrieb` 36 CHF pro Fahrzeug und Jahr, `perVehicle`).
 - **Interner Aufruf:** Mit `AI_PROXY_INTERNAL_TOKEN` (Node) bzw. dem Service-Role-Key (Edge) als Bearer plus Header `x-user-id` dürfen eigene Server-Prozesse im Namen eines Nutzers zählen und aufrufen, etwa eine OCR-Pipeline ohne Nutzer-Session.
-- **Jahresrechnung** (Betriebe, nur Node mit InstantDB-Store): `src/invoice.ts` prüft die Bestellung und bildet Nummer
+- **Konto statt Person:** Optional `accountOf(user)` (`createApp` bzw. `createEdgeApp(env, { accountOf })`) bildet
+  eine Person auf ihr Konto ab, etwa die Organisation in dms. Verbrauch, Testzeit, Abo und Fair-Use-Bremse laufen
+  dann pro Konto; `null` heisst kein Konto (401). Interne Aufrufe geben das Konto direkt in `x-user-id` an.
+- **Jahresrechnung** (Store: InstantDB und Supabase; Versand und PDF nur im Node-Einstieg): `src/invoice.ts` prüft die Bestellung und bildet Nummer
   und Zahlungsreferenz (QR-Referenz bei QR-IBAN, sonst SCOR), `src/invoice-subscription.ts` den Ablauf (Zugang ab
   Bestellung, bezahltes Jahr nach der Testzeit, Verlängerung 30 Tage vor Ablauf, kündbar bis zum Ablauf),
   `src/invoice-pdf.ts` das PDF mit QR-Zahlteil (pdfkit + swissqrbill), `src/invoice-mail.ts` den Versand über Resend.
@@ -42,7 +45,7 @@ Bei erreichtem Limit antwortet der Proxy mit 402 im Mistral-Fehlerformat, sodass
   `FEEDBACK_FROM`. Bewusst unabhängig von der IBAN, damit eine Instanz ohne Rechnungsstellung Fehler und Wünsche
   trotzdem annimmt. Ohne Ziel antwortet `/feedback` mit 501, ohne `RESEND_TOKEN` landet alles im Log. Die Verlängerung läuft als Job in der App (auto-service
   `scripts/renewals.ts`), der Proxy verlängert nicht selbst.
-- `src/stores/` Persistenz: `memory` für Tests, `instant` für InstantDB, `supabase` für Postgres (Tabellen `ai_usage`, `ai_subscriptions`, RPC `ai_add_usage`; Schema in dms `supabase/migrations/00007_ai_proxy.sql`).
+- `src/stores/` Persistenz: `memory` für Tests, `instant` für InstantDB, `supabase` für Postgres (Tabellen `ai_usage`, `ai_subscriptions`, RPC `ai_add_usage`; Schema in dms `supabase/migrations/`, ab `00007_ai_proxy.sql`).
 - `src/auth/` Token-Prüfung: `instant` für InstantDB-Refresh-Tokens, `supabase` für Supabase-Access-Tokens (JWT der Session).
 - `src/node.ts` Einstieg für Node. Wählt das Backend nach Umgebung: `INSTANT_APP_ID` + `INSTANT_ADMIN_TOKEN` oder `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`.
 - `src/edge.ts` Einstieg für Supabase Edge Functions (Deno), immer mit Supabase-Backend. Routen liegen unter `/<Funktionsname>/...`, Default `ai-proxy`. `deno.json` liefert die Import-Map (hono, stripe, supabase-js als npm-Specifier).
