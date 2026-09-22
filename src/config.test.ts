@@ -104,6 +104,35 @@ describe('loadConfig Jahresrechnung', () => {
   })
 })
 
+describe('loadConfig Rechnung von Hand', () => {
+  const env = { ...base, INSTANT_APP_ID: 'app', INSTANT_ADMIN_TOKEN: 'tok' }
+
+  it('ohne IBAN geht der Auftrag an INVOICE_EMAIL, ersatzweise FEEDBACK_TO', () => {
+    expect(loadConfig({ ...env, INVOICE_EMAIL: 'info@wartungsheft.ch', RESEND_TOKEN: 're_x' }).invoiceRequests)
+      .toEqual({ to: 'info@wartungsheft.ch', from: 'Wartungsheft <info@wartungsheft.ch>', resendToken: 're_x' })
+    expect(loadConfig({ ...env, FEEDBACK_TO: 'info@wartungsheft.ch', FEEDBACK_FROM: 'Wartungsheft <rueckmeldung@wartungsheft.ch>' }).invoiceRequests)
+      .toEqual({ to: 'info@wartungsheft.ch', from: 'Wartungsheft <rueckmeldung@wartungsheft.ch>', resendToken: '' })
+  })
+
+  it('Rückmeldungen gehen auch ohne IBAN an INVOICE_EMAIL', () => {
+    expect(loadConfig({ ...env, INVOICE_EMAIL: 'info@wartungsheft.ch' }).feedback?.to).toBe('info@wartungsheft.ch')
+  })
+
+  it('ohne Postfach aus, mit IBAN nicht gebraucht', () => {
+    expect(loadConfig(env).invoiceRequests).toBeNull()
+    const withIban = loadConfig({
+      ...env,
+      INVOICE_IBAN: 'CH93 0076 2011 6238 5295 7',
+      INVOICE_CREDITOR_NAME: 'Goran Strainovic',
+      INVOICE_STREET: 'Bahnstrasse 9b',
+      INVOICE_ZIP: '9323',
+      INVOICE_CITY: 'Steinach',
+      INVOICE_EMAIL: 'info@wartungsheft.ch',
+    })
+    expect(withIban.invoiceRequests).toBeNull()
+  })
+})
+
 describe('loadConfig fair use', () => {
   it('liest AI_PROXY_BURST_LIMIT, sonst 20 Anfragen pro Minute', () => {
     const env = { ...base, SUPABASE_URL: 'u', SUPABASE_SERVICE_ROLE_KEY: 'k' }

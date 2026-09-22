@@ -35,6 +35,8 @@ export interface ServerConfig {
   invoicing: InvoicingConfig | null
   /** Rückmeldungen aus der App; null ohne Ziel-Postfach */
   feedback: FeedbackConfig | null
+  /** Rechnung von Hand: nur ohne INVOICE_IBAN, Auftrag an dieses Postfach; null ohne Postfach */
+  invoiceRequests: FeedbackConfig | null
 }
 
 export interface FeedbackConfig {
@@ -84,12 +86,30 @@ export function loadInvoicing(env: NodeJS.ProcessEnv): InvoicingConfig | null {
  * Wünsche trotzdem entgegennehmen. Ziel ist FEEDBACK_TO, ersatzweise das Postfach aus INVOICE_EMAIL.
  */
 export function loadFeedback(env: NodeJS.ProcessEnv, invoicing: InvoicingConfig | null): FeedbackConfig | null {
-  const to = env.FEEDBACK_TO || invoicing?.creditor.email || ''
+  // INVOICE_EMAIL auch ohne IBAN: dann ist invoicing null, das Postfach aber da (Rechnung von Hand)
+  const to = env.FEEDBACK_TO || invoicing?.creditor.email || env.INVOICE_EMAIL || ''
   if (!to)
     return null
   return {
     to,
     from: env.FEEDBACK_FROM || invoicing?.from || `Wartungsheft <${to}>`,
+    resendToken: env.RESEND_TOKEN || '',
+  }
+}
+
+/**
+ * Ohne IBAN keine QR-Rechnung, aber trotzdem Bestellungen: der Auftrag, die Rechnung von Hand zu schreiben, geht an
+ * INVOICE_EMAIL, ersatzweise FEEDBACK_TO. Mit IBAN null, dann verschickt der Proxy die Rechnung selbst.
+ */
+export function loadInvoiceRequests(env: NodeJS.ProcessEnv, invoicing: InvoicingConfig | null): FeedbackConfig | null {
+  if (invoicing)
+    return null
+  const to = env.INVOICE_EMAIL || env.FEEDBACK_TO || ''
+  if (!to)
+    return null
+  return {
+    to,
+    from: env.INVOICE_FROM || env.FEEDBACK_FROM || `Wartungsheft <${to}>`,
     resendToken: env.RESEND_TOKEN || '',
   }
 }
@@ -144,5 +164,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     internalToken: env.AI_PROXY_INTERNAL_TOKEN || '',
     invoicing,
     feedback: loadFeedback(env, invoicing),
+    invoiceRequests: loadInvoiceRequests(env, invoicing),
   }
 }

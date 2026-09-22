@@ -71,9 +71,11 @@ export interface FeedbackDeps {
 }
 
 export interface InvoicingDeps {
-  /** IBAN oder QR-IBAN des Empfängers; bestimmt die Art der Zahlungsreferenz */
+  /** IBAN oder QR-IBAN des Empfängers; bestimmt die Art der Zahlungsreferenz. Leer bei Rechnung von Hand (SCOR) */
   iban: string
-  /** Versand (PDF per Mail); ein Fehler bricht die Bestellung nicht ab */
+  /** Rechnung von Hand: `notify` schickt den Auftrag an den Betreiber statt das PDF an den Kunden */
+  manual?: boolean
+  /** Versand (PDF per Mail oder Auftrag an den Betreiber); ein Fehler bricht die Bestellung nicht ab */
   notify: (notice: InvoiceNotice) => Promise<void>
   /** Heutiges Datum als ISO-Tag; nur für Tests */
   today?: () => string
@@ -288,7 +290,8 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
     const sub = await currentSubscription(user.id)
     const plan = planOf(sub, catalog)
     const usage = await deps.store.getUsage(user.id, month)
-    // `ordering`: erst mit IBAN und Versand nimmt der Proxy Bestellungen an; ohne das zeigt die App keinen Kaufweg
+    // `ordering`: Bestellungen gehen, sobald Rechnungen ausgestellt werden, mit IBAN als QR-Rechnung, ohne von Hand;
+    // ohne beides zeigt die App keinen Kaufweg
     return c.json({ plan, month, usage, limits: catalog.plans[plan].limits, plans: catalog.plans, trial: accessTrial(sub), billing: billingInfo(sub), ordering: !!deps.invoicing })
   })
 
@@ -317,7 +320,7 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
       return c.json({ error: { code: 'already_active', message: 'Es läuft bereits ein Abo.' } }, 409)
     await deps.store.setSubscription(userId, result.sub)
     const mailed = await notify({ type: 'invoice', userId, sub: result.sub, invoice: result.invoice })
-    return c.json({ invoice: result.invoice, mailed })
+    return c.json({ invoice: result.invoice, mailed, manual: !!deps.invoicing.manual })
   })
 
   app.post('/billing/cancel', async (c) => {

@@ -18,7 +18,7 @@ const order = {
 
 const INTERNAL = 'internal-secret'
 
-function setup(options: { today?: string, invoicing?: boolean, failMail?: boolean } = {}) {
+function setup(options: { today?: string, invoicing?: boolean, failMail?: boolean, manual?: boolean } = {}) {
   const store = new MemoryStore()
   const notices: InvoiceNotice[] = []
   let today = options.today ?? '2026-09-19'
@@ -33,7 +33,8 @@ function setup(options: { today?: string, invoicing?: boolean, failMail?: boolea
     invoicing: options.invoicing === false
       ? null
       : {
-          iban: IBAN,
+          iban: options.manual ? '' : IBAN,
+          ...(options.manual ? { manual: true } : {}),
           today: () => today,
           notify: async (notice) => {
             if (options.failMail)
@@ -207,6 +208,34 @@ describe('interne Job-Endpunkte (Verlängerung, Zahlung)', () => {
 
   it('meldet in der Nutzung, ob eine Bestellung überhaupt möglich ist', async () => {
     expect((await usage(setup().app)).ordering).toBe(true)
+    expect((await usage(setup({ manual: true }).app)).ordering).toBe(true)
     expect((await usage(setup({ invoicing: false }).app)).ordering).toBe(false)
+  })
+})
+
+describe('Rechnung von Hand (ohne IBAN)', () => {
+  it('Bestellung legt das Abo mit SCOR-Referenz an und meldet den Auftrag an den Betreiber', async () => {
+    const { app, notices } = setup({ manual: true })
+    const res = await post(app, '/billing/order', order)
+    expect(res.status).toBe(200)
+    const body = await res.json() as any
+    expect(body).toMatchObject({ mailed: true, manual: true, invoice: { amount: 180, dueAt: '2026-10-19' } })
+    expect(body.invoice.reference).toMatch(/^RF\d\d/)
+    expect(notices).toMatchObject([{ type: 'invoice', invoice: { number: body.invoice.number } }])
+    expect((await usage(app)).plan).toBe('betrieb')
+  })
+
+  it('mit IBAN kein Auftrag von Hand', async () => {
+    const { app } = setup()
+    expect(((await (await post(app, '/billing/order', order)).json()) as any).manual).toBe(false)
+  })
+
+  it('Zahlung über die SCOR-Referenz eintragen geht wie mit QR-Rechnung', async () => {
+    const { app } = setup({ manual: true })
+    const { invoice } = (await (await post(app, '/billing/order', order)).json()) as any
+    const internal = { 'Authorization': `Bearer ${INTERNAL}`, 'x-user-id': 'user-1', 'content-type': 'application/json' }
+    const res = await app.request('/billing/paid', { method: 'POST', headers: internal, body: JSON.stringify({ key: invoice.reference, paidAt: '2026-10-02' }) })
+    expect(res.status).toBe(200)
+    expect((await usage(app)).billing.openInvoice).toBeNull()
   })
 })
