@@ -23,6 +23,8 @@ const config = loadConfig()
 
 let store: Store
 let verifyToken: (token: string) => Promise<{ id: string } | null>
+// Kontolöschung nur mit echten Nutzern; im Auth-Bypass (lokal, E2E) gibt es kein Login zu löschen
+let deleteAuthUser: ((userId: string) => Promise<void>) | undefined
 if (config.backend === 'supabase') {
   store = new SupabaseStore(config.supabase!)
   verifyToken = createSupabaseVerifyToken(config.supabase!).verifyToken
@@ -30,7 +32,10 @@ if (config.backend === 'supabase') {
 else {
   const instant = { apiURI: config.instantApiUri, appId: config.instantAppId, adminToken: config.instantAdminToken }
   store = new InstantStore(instant)
-  verifyToken = createInstantVerifyToken(instant).verifyToken
+  const auth = createInstantVerifyToken(instant)
+  verifyToken = auth.verifyToken
+  if (!config.authBypass)
+    deleteAuthUser = auth.deleteUser
 }
 
 const billing = config.stripeSecretKey && config.stripeWebhookSecret
@@ -96,6 +101,7 @@ const app = createApp({
   internalToken: config.internalToken || undefined,
   invoicing,
   feedback,
+  deleteAuthUser,
 })
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {

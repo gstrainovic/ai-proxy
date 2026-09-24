@@ -10,7 +10,7 @@ import type { TrialState } from './trial.ts'
 import { createCheckout, createPortal, handleWebhook, notConfigured } from './billing.ts'
 import { feedbackMail, MAX_AUDIO_BYTES, parseFeedback } from './feedback.ts'
 import { isoDate, parseOrder } from './invoice.ts'
-import { cancelSubscription, effectiveSubscription, markInvoicePaid, openInvoices, orderSubscription, periodEnd, renewalDue, renewSubscription, resumeSubscription } from './invoice-subscription.ts'
+import { cancelSubscription, effectiveSubscription, markInvoicePaid, openInvoices, orderSubscription, periodEnd, renewalDue, renewSubscription, resumeSubscription, retireSubscription } from './invoice-subscription.ts'
 import { checkLimit, currentMonth, resolvePlan } from './limits.ts'
 import { checkBurst, createBurstState } from './rate-limit.ts'
 import { startTrial, trialState } from './trial.ts'
@@ -53,6 +53,11 @@ export interface AppDeps {
   invoicing?: InvoicingDeps | null
   /** Rückmeldungen aus der App; null/undefined = nicht konfiguriert (Endpoint antwortet 501). */
   feedback?: FeedbackDeps | null
+  /**
+   * Kontolöschung (`POST /me/delete`): entfernt das Login beim Auth-Anbieter, nachdem Verbrauch und Abo weg sind.
+   * Fehlt die Funktion (lokaler Modus ohne echte Nutzer), bleibt es bei Verbrauch und Abo.
+   */
+  deleteAuthUser?: (userId: string) => Promise<void>
 }
 
 /** Ereignis für Mail an Kunde und Betreiber: neue Rechnung oder stornierte Rechnungen nach Kündigung */
@@ -307,6 +312,30 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
     // `ordering`: Bestellungen gehen, sobald Rechnungen ausgestellt werden, mit IBAN als QR-Rechnung, ohne von Hand;
     // ohne beides zeigt die App keinen Kaufweg
     return c.json({ plan, month, usage, limits: catalog.plans[plan].limits, plans: catalog.plans, trial: accessTrial(sub), billing: billingInfo(sub), ordering: !!deps.invoicing })
+  })
+
+  // Kontolöschung (AGB): die App hat ihre Daten schon gelöscht; hier gehen Verbrauch, Testzeit und das Login.
+  // Ein Abo mit gestellten Rechnungen bleibt als Beleg, gekündigt (retireSubscription). Nur die Person selbst, kein Job.
+  app.post('/me/delete', async (c) => {
+    const user = c.get('user')
+    if (user.internal)
+      return c.json({ error: { code: 'forbidden', message: 'Nur die Person selbst kann ihr Konto löschen.' } }, 403)
+    await deps.store.deleteUsage(user.id)
+    const retired = retireSubscription(await deps.store.getSubscription(user.id))
+    if (retired)
+      await deps.store.setSubscription(user.id, retired)
+    else
+      await deps.store.deleteSubscription(user.id)
+    if (deps.deleteAuthUser) {
+      try {
+        await deps.deleteAuthUser(user.id)
+      }
+      catch (err) {
+        console.error(`[ai-proxy] Login von ${user.id} nicht gelöscht:`, err)
+        return c.json({ error: { code: 'account_delete_failed', message: 'Das Konto konnte nicht gelöscht werden. Bitte später noch einmal versuchen.' } }, 502)
+      }
+    }
+    return c.json({ ok: true })
   })
 
   // Jahresabo auf Rechnung: Bestellen mit Rechnungsadresse, Kündigen auf Ende der Laufzeit, Kündigung zurücknehmen

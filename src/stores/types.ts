@@ -31,4 +31,8 @@ export interface Store {
   getSubscription: (userId: string) => Promise<Subscription | null>
   setSubscription: (userId: string, sub: Subscription) => Promise<void>
   findUserByStripeCustomer: (customerId: string) => Promise<string | null>
+  /** Kontolöschung: alle Nutzungszähler des Nutzers entfernen */
+  deleteUsage: (userId: string) => Promise<void>
+  /** Kontolöschung: Abo-Datensatz entfernen (nur ohne gestellte Rechnungen, siehe `retireSubscription`) */
+  deleteSubscription: (userId: string) => Promise<void>
 }

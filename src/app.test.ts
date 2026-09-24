@@ -395,3 +395,53 @@ describe('fair use', () => {
     expect(calls).toHaveLength(2)
   })
 })
+
+describe('konto löschen (POST /me/delete)', () => {
+  it('verlangt eine Anmeldung', async () => {
+    const { app } = setup()
+    const res = await app.request('/me/delete', { method: 'POST' })
+    expect(res.status).toBe(401)
+  })
+
+  it('löscht Verbrauch und Testzeit und das Login', async () => {
+    const deleted: string[] = []
+    const { app, store } = setup({ deleteAuthUser: async (id) => { deleted.push(id) } })
+    await store.addUsage('user-1', currentMonth(), { ocrPages: 4 })
+    await store.setSubscription('user-1', { plan: 'privat', status: 'trial', trialStartedAt: '2026-09-01' })
+    const res = await app.request('/me/delete', { method: 'POST', headers: auth })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true })
+    expect((await store.getUsage('user-1', currentMonth())).ocrPages).toBe(0)
+    expect(await store.getSubscription('user-1')).toBeNull()
+    expect(deleted).toEqual(['user-1'])
+  })
+
+  it('behält ein Abo mit gestellten Rechnungen als Buchhaltungsbeleg, aber ohne Verlängerung', async () => {
+    const { app, store } = setup({ deleteAuthUser: async () => {} })
+    await store.setSubscription('user-1', {
+      plan: 'betrieb',
+      status: 'active',
+      billing: 'invoice',
+      vehicles: 3,
+      invoices: [{ number: 'R-1', reference: 'x', amount: 108, currency: 'CHF', issueDate: '2026-09-01', dueAt: '2026-10-01', periodStart: '2026-09-01', periodEnd: '2027-09-01', vehicles: 3, status: 'open' } as any],
+    })
+    const res = await app.request('/me/delete', { method: 'POST', headers: auth })
+    expect(res.status).toBe(200)
+    const sub = await store.getSubscription('user-1')
+    expect(sub?.invoices).toHaveLength(1)
+    expect(sub?.status).toBe('canceled')
+    expect(sub?.cancelAtPeriodEnd).toBe(true)
+  })
+
+  it('antwortet 502, wenn das Login nicht gelöscht werden kann', async () => {
+    const { app } = setup({ deleteAuthUser: async () => { throw new Error('admin down') } })
+    const res = await app.request('/me/delete', { method: 'POST', headers: auth })
+    expect(res.status).toBe(502)
+  })
+
+  it('lehnt interne Aufrufe ab', async () => {
+    const { app } = setup({ internalToken: 'internal-secret' })
+    const res = await app.request('/me/delete', { method: 'POST', headers: { 'Authorization': 'Bearer internal-secret', 'x-user-id': 'user-9' } })
+    expect(res.status).toBe(403)
+  })
+})

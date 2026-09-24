@@ -113,4 +113,17 @@ export class InstantStore implements Store {
     const result = await this.db.query({ subscriptions: { $: { where: { stripeCustomerId: customerId } } } })
     return ((result.subscriptions as any[])[0]?.userId as string | undefined) ?? null
   }
+
+  async deleteUsage(userId: string): Promise<void> {
+    const result = await this.db.query({ usage: { $: { where: { userId } } } })
+    const rows = result.usage as any[]
+    if (rows.length)
+      await this.db.transact(rows.map(row => this.db.tx.usage[row.id].delete()))
+  }
+
+  async deleteSubscription(userId: string): Promise<void> {
+    const row = await this.findSubscriptionRow(userId)
+    if (row)
+      await this.db.transact(this.db.tx.subscriptions[row.id].delete())
+  }
 }

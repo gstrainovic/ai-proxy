@@ -30,5 +30,10 @@ export function createVerifyToken(config: AuthConfig) {
     return { userId: user.id, refreshToken }
   }
 
-  return { verifyToken, issueTestToken }
+  /** Kontolöschung: entfernt den Auth-Nutzer samt Refresh-Tokens; die Daten der App löscht der Client vorher selbst */
+  async function deleteUser(id: string): Promise<void> {
+    await db.auth.deleteUser({ id })
+  }
+
+  return { verifyToken, issueTestToken, deleteUser }
 }
