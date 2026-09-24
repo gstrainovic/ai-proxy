@@ -80,6 +80,16 @@ export function resumeSubscription(sub: Subscription): Subscription {
   return { ...sub, cancelAtPeriodEnd: false }
 }
 
+/**
+ * Kontolöschung: ein Abo mit gestellten Rechnungen bleibt als Buchhaltungsbeleg (Aufbewahrungspflicht, AGB),
+ * aber gekündigt und ohne Verlängerung. Ohne Rechnungen (Testzeit, Stripe ohne Beleg) gibt es nichts zu behalten: null.
+ */
+export function retireSubscription(sub: Subscription | null): Subscription | null {
+  if (!sub?.invoices?.length)
+    return null
+  return { ...sub, status: 'canceled', cancelAtPeriodEnd: true }
+}
+
 export function renewalDue(sub: Subscription, today: string): boolean {
   if (sub.billing !== 'invoice' || sub.status !== 'active' || sub.cancelAtPeriodEnd)
     return false

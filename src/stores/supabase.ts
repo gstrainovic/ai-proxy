@@ -134,4 +134,16 @@ export class SupabaseStore implements Store {
       throw new Error(`ai_subscriptions suchen fehlgeschlagen: ${error.message}`)
     return data?.user_id ?? null
   }
+
+  async deleteUsage(userId: string): Promise<void> {
+    const { error } = await this.db.from('ai_usage').delete().eq('user_id', userId)
+    if (error)
+      throw new Error(`ai_usage löschen fehlgeschlagen: ${error.message}`)
+  }
+
+  async deleteSubscription(userId: string): Promise<void> {
+    const { error } = await this.db.from('ai_subscriptions').delete().eq('user_id', userId)
+    if (error)
+      throw new Error(`ai_subscriptions löschen fehlgeschlagen: ${error.message}`)
+  }
 }

@@ -40,4 +40,15 @@ export class MemoryStore implements Store {
     }
     return null
   }
+
+  async deleteUsage(userId: string): Promise<void> {
+    for (const key of [...this.usage.keys()]) {
+      if (key.startsWith(`${userId}:`))
+        this.usage.delete(key)
+    }
+  }
+
+  async deleteSubscription(userId: string): Promise<void> {
+    this.subscriptions.delete(userId)
+  }
 }

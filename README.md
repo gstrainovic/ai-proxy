@@ -12,6 +12,7 @@ Kleiner Server zwischen App und Mistral-API. Er hält den Mistral-Key, zählt de
 | `GET /me/usage` | Plan, Monat, Verbrauch, Limits des Nutzers und der ganze Plan-Katalog (`plans`) |
 | `POST /me/transcribe` | Diktat: Audio (`multipart/form-data`, Feld `audio`, max. 5 MB) an Voxtral, Antwort `{ text }`; Fair-Use-Bremse, 402 nach der Testzeit, zählt geschätzte Sekunden als `chatTokens` |
 | `POST /feedback` | Rückmeldung aus der App: Text und/oder Sprachnachricht, wird transkribiert und per Mail zugestellt |
+| `POST /me/delete` | Kontolöschung: Verbrauch und Testzeit weg, Login beim Auth-Anbieter gelöscht (`deleteAuthUser`); ein Abo mit gestellten Rechnungen bleibt gekündigt als Beleg. Die App löscht ihre Daten vorher selbst. Nur die Person, kein interner Aufruf (403) |
 | `POST /billing/checkout` | Stripe Checkout für einen bezahlten Plan |
 | `POST /billing/portal` | Stripe Kundenportal |
 | `POST /stripe/webhook` | Setzt den Plan nach Zahlung, Änderung oder Kündigung |
