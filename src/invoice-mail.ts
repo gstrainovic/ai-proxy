@@ -7,6 +7,7 @@ import type { InvoiceNotice } from './app.ts'
 import type { Creditor, InvoiceRecord } from './invoice.ts'
 import { Buffer } from 'node:buffer'
 import { formatChf, formatDay, invoiceLines, renderInvoicePdf } from './invoice-pdf.ts'
+import { textToHtml } from './mail-html.ts'
 
 export interface ResendNotifierConfig {
   token: string
@@ -31,10 +32,22 @@ function invoiceText(invoice: InvoiceRecord, creditor: Creditor, appUrl: string,
     '',
     `Das Abo verlängert sich jeweils um ein Jahr. Kündigen geht bis zum Ablauf ohne Frist, in der App unter Einstellungen (${appUrl}/settings) oder mit einer Antwort auf diese Mail.`,
     '',
-    'Freundliche Grüsse',
-    creditor.tradeName ? `${creditor.name}, ${creditor.tradeName}` : creditor.name,
-    [creditor.email, creditor.website].filter(Boolean).join(' · '),
+    ...signature(creditor),
   ].join('\n')
+}
+
+/** Standard-Signatur (Skill mailbox): jede Angabe auf eigener Zeile, Marke vor dem Einzelunternehmen, keine UID */
+function signature(creditor: Creditor): string[] {
+  const website = creditor.website?.replace(/^https?:\/\//, '').replace(/\/$/, '')
+  return [
+    'Freundliche Grüsse',
+    creditor.name,
+    '',
+    ...[creditor.brand, creditor.tradeName].filter((v): v is string => Boolean(v)),
+    `${creditor.street}, ${creditor.zip} ${creditor.city}`,
+    creditor.email,
+    ...(website ? [website.startsWith('www.') ? website : `www.${website}`] : []),
+  ]
 }
 
 function voidedText(invoices: InvoiceRecord[], creditor: Creditor, contact: string): string {
@@ -44,8 +57,7 @@ function voidedText(invoices: InvoiceRecord[], creditor: Creditor, contact: stri
     'die Kündigung ist eingegangen. Diese Rechnungen sind storniert, bitte nicht bezahlen:',
     ...invoices.map(i => `- ${i.number} über ${formatChf(i.amount)}`),
     '',
-    'Freundliche Grüsse',
-    creditor.tradeName ? `${creditor.name}, ${creditor.tradeName}` : creditor.name,
+    ...signature(creditor),
   ].join('\n')
 }
 
@@ -56,7 +68,7 @@ export function createResendNotifier(config: ResendNotifierConfig): (notice: Inv
     const res = await fetchFn('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${config.token}`, 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
-      body: JSON.stringify({ from: config.from, bcc: [config.bcc], reply_to: config.creditor.email, ...payload }),
+      body: JSON.stringify({ from: config.from, bcc: [config.bcc], reply_to: config.creditor.email, ...payload, html: textToHtml(String(payload.text)) }),
     })
     if (!res.ok)
       throw new Error(`Resend ${res.status}: ${await res.text()}`)

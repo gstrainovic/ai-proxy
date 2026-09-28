@@ -7,6 +7,7 @@
  * Das Transkript macht die Rückmeldung für den Betreiber lesbar statt abhörbar.
  */
 import { Buffer } from 'node:buffer'
+import { textToHtml } from './mail-html.ts'
 
 /** Zeichen, die eine Rückmeldung höchstens hat; alles darüber wird abgeschnitten statt abgelehnt */
 export const MAX_TEXT_LENGTH = 4000
@@ -94,6 +95,7 @@ export function createFeedbackNotifier(config: {
         ...(notice.replyTo ? { reply_to: notice.replyTo } : {}),
         subject: notice.subject,
         text: notice.text,
+        html: textToHtml(notice.text),
         ...(notice.audio
           ? { attachments: [{ filename: notice.audio.filename, content: Buffer.from(notice.audio.bytes).toString('base64') }] }
           : {}),
