@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { feedbackMail, MAX_AUDIO_BYTES, MAX_TEXT_LENGTH, parseFeedback } from './feedback.ts'
+import { createFeedbackNotifier, feedbackMail, MAX_AUDIO_BYTES, MAX_TEXT_LENGTH, parseFeedback } from './feedback.ts'
 
 describe('parseFeedback', () => {
   it('nimmt Text an und schneidet zu lange Eingaben ab', () => {
@@ -49,5 +49,19 @@ describe('feedbackMail', () => {
   it('ohne E-Mail steht wenigstens die Nutzer-ID drin', () => {
     const mail = feedbackMail({ ...basis, email: null, text: 'Test' })
     expect(mail.text).toContain('user-1')
+  })
+})
+
+describe('createFeedbackNotifier', () => {
+  it('schickt Text und HTML-Fassung', async () => {
+    const bodies: any[] = []
+    const fetchFn = (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)))
+      return new Response('{}', { status: 200 })
+    }) as typeof fetch
+    const notify = createFeedbackNotifier({ token: 't', from: 'x <r@wartungsheft.ch>', to: 'info@wartungsheft.ch', fetch: fetchFn })
+    await notify({ subject: 'S', text: 'Zeile 1\nZeile 2 <b>' })
+    expect(bodies[0].text).toBe('Zeile 1\nZeile 2 <b>')
+    expect(bodies[0].html).toContain('Zeile 1<br>\nZeile 2 &lt;b&gt;')
   })
 })

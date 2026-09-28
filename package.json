@@ -26,6 +26,7 @@
     "./invoice-pdf": "./src/invoice-pdf.ts",
     "./invoice-subscription": "./src/invoice-subscription.ts",
     "./limits": "./src/limits.ts",
+    "./mail-html": "./src/mail-html.ts",
     "./plans": "./src/plans.ts",
     "./stores/instant": "./src/stores/instant.ts",
     "./stores/memory": "./src/stores/memory.ts",
