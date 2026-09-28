@@ -44,7 +44,8 @@ function signature(creditor: Creditor): string[] {
     creditor.name,
     '',
     ...[creditor.brand, creditor.tradeName].filter((v): v is string => Boolean(v)),
-    `${creditor.street}, ${creditor.zip} ${creditor.city}`,
+    creditor.street,
+    `${creditor.zip} ${creditor.city}`,
     creditor.email,
     ...(website ? [website.startsWith('www.') ? website : `www.${website}`] : []),
   ]
