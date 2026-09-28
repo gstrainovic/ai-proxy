@@ -11,7 +11,8 @@ const signatur = [
   '',
   'Wartungsheft',
   'Strainovic IT',
-  'Bahnstrasse 9b, 9323 Steinach',
+  'Bahnstrasse 9b',
+  '9323 Steinach',
   'info@wartungsheft.ch',
   'www.wartungsheft.ch',
 ].join('\n')
@@ -19,7 +20,7 @@ const signatur = [
 describe('textToHtml', () => {
   it('setzt jede Zeile mit <br> und Leerzeilen als Absatz', () => {
     const html = textToHtml(signatur)
-    expect(html).toContain('Strainovic IT<br>\nBahnstrasse 9b, 9323 Steinach<br>\n')
+    expect(html).toContain('Strainovic IT<br>\nBahnstrasse 9b<br>\n9323 Steinach<br>\n')
     expect(html).toContain('Freundliche Grüsse<br>\nGoran Strainovic</p>')
     expect(html.match(/<p/g)).toHaveLength(4)
   })
