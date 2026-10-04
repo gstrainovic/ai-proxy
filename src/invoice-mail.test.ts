@@ -70,6 +70,28 @@ describe('createResendNotifier', () => {
     expect(calls[0]!.body.attachments).toBeUndefined()
   })
 
+  it('schreibt Rechnung und Storno in der Sprache der Rechnungsadresse', async () => {
+    const expected = {
+      fr: { subject: `Facture ${invoice.number}, abonnement annuel Wartungsheft`, hallo: 'Bonjour Petra Muster', datei: `Facture-${invoice.number}.pdf`, storno: 'Wartungsheft : facture annulée', gruss: 'Meilleures salutations' },
+      it: { subject: `Fattura ${invoice.number}, abbonamento annuale Wartungsheft`, hallo: 'Buongiorno Petra Muster', datei: `Fattura-${invoice.number}.pdf`, storno: 'Wartungsheft: fattura annullata', gruss: 'Cordiali saluti' },
+      en: { subject: `Invoice ${invoice.number}, Wartungsheft annual subscription`, hallo: 'Hello Petra Muster', datei: `Invoice-${invoice.number}.pdf`, storno: 'Wartungsheft: invoice cancelled', gruss: 'Kind regards' },
+    }
+    for (const [language, e] of Object.entries(expected)) {
+      const { calls, fetchFn } = capture()
+      const notify = createResendNotifier({ token: 're_test', from: 'x <r@wartungsheft.ch>', bcc: 'info@wartungsheft.ch', creditor, appUrl: 'https://wartungsheft.ch', fetch: fetchFn })
+      const localized: Subscription = { ...sub, billingAddress: { ...sub.billingAddress!, language: language as 'fr' } }
+      await notify({ type: 'invoice', userId: 'user-a', sub: localized, invoice })
+      await notify({ type: 'voided', userId: 'user-a', sub: localized, invoices: [invoice] })
+      expect(calls[0]!.body.subject).toBe(e.subject)
+      expect(calls[0]!.body.text.startsWith(e.hallo)).toBe(true)
+      expect(calls[0]!.body.text).toContain(`${e.gruss}\nGoran Strainovic`)
+      expect(calls[0]!.body.text).not.toContain('Rechnung')
+      expect(calls[0]!.body.attachments[0].filename).toBe(e.datei)
+      expect(calls[1]!.body.subject).toBe(e.storno)
+      expect(calls[1]!.body.text).toContain(invoice.number)
+    }
+  })
+
   it('Fehler von Resend wirft', async () => {
     const { fetchFn } = capture(422)
     const notify = createResendNotifier({ token: 're_test', from: 'x <r@wartungsheft.ch>', bcc: 'info@wartungsheft.ch', creditor, appUrl: 'https://wartungsheft.ch', fetch: fetchFn })

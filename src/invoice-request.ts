@@ -6,7 +6,9 @@
 import type { InvoiceNotice } from './app.ts'
 import type { BillingAddress, InvoiceRecord } from './invoice.ts'
 import { createFeedbackNotifier } from './feedback.ts'
+import type { InvoiceLanguage } from './invoice-texts.ts'
 import { formatChf, formatDay, invoiceLines } from './invoice-pdf.ts'
+import { invoiceLanguage } from './invoice-texts.ts'
 
 export interface InvoiceRequestMail {
   subject: string
@@ -25,8 +27,11 @@ function addressLines(address: BillingAddress | undefined): string[] {
     `${address.zip} ${address.city}`,
     `E-Mail: ${address.email}`,
     ...(address.reference ? [`Referenz des Kunden: ${address.reference}`] : []),
+    `Sprache der Rechnung: ${SPRACHE[invoiceLanguage(address.language)]}`,
   ]
 }
+
+const SPRACHE: Record<InvoiceLanguage, string> = { de: 'Deutsch', fr: 'Französisch', it: 'Italienisch', en: 'Englisch' }
 
 function invoiceBlock(invoice: InvoiceRecord): string[] {
   const [title, detail] = invoiceLines(invoice, 'Wartungsheft')

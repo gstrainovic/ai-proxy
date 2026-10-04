@@ -5,8 +5,10 @@
  */
 import type { InvoiceNotice } from './app.ts'
 import type { Creditor, InvoiceRecord } from './invoice.ts'
+import type { InvoiceLanguage } from './invoice-texts.ts'
 import { Buffer } from 'node:buffer'
 import { formatChf, formatDay, invoiceLines, renderInvoicePdf } from './invoice-pdf.ts'
+import { invoiceLanguage, invoiceTexts } from './invoice-texts.ts'
 import { textToHtml } from './mail-html.ts'
 
 export interface ResendNotifierConfig {
@@ -21,26 +23,26 @@ export interface ResendNotifierConfig {
   fetch?: typeof fetch
 }
 
-function invoiceText(invoice: InvoiceRecord, creditor: Creditor, appUrl: string, contact: string): string {
+function invoiceText(invoice: InvoiceRecord, creditor: Creditor, appUrl: string, contact: string, language: InvoiceLanguage): string {
+  const t = invoiceTexts(language)
   return [
-    `Guten Tag ${contact}`,
+    t.greeting(contact),
     '',
-    `im Anhang die Rechnung ${invoice.number}: ${invoiceLines(invoice, creditor.brand ?? 'Wartungsheft')[0]}, `
-    + `${invoice.vehicles} ${invoice.vehicles === 1 ? 'Fahrzeug' : 'Fahrzeuge'}.`,
+    t.mailIntro(invoice.number, invoiceLines(invoice, creditor.brand ?? 'Wartungsheft', language)[0], t.vehicles(invoice.vehicles)),
     '',
-    `Betrag: ${formatChf(invoice.amount)}, zahlbar bis ${formatDay(invoice.dueAt)} mit dem QR-Zahlteil im PDF — am einfachsten im E-Banking oder mit der Banking-App.`,
+    t.mailAmount(formatChf(invoice.amount, language), formatDay(invoice.dueAt, language)),
     '',
-    `Das Abo verlängert sich jeweils um ein Jahr. Kündigen geht bis zum Ablauf ohne Frist, in der App unter Einstellungen (${appUrl}/settings) oder mit einer Antwort auf diese Mail.`,
+    t.mailRenewal(`${appUrl}/settings`),
     '',
-    ...signature(creditor),
+    ...signature(creditor, language),
   ].join('\n')
 }
 
 /** Standard-Signatur (Skill mailbox): jede Angabe auf eigener Zeile, Marke vor dem Einzelunternehmen, keine UID */
-function signature(creditor: Creditor): string[] {
+function signature(creditor: Creditor, language: InvoiceLanguage): string[] {
   const website = creditor.website?.replace(/^https?:\/\//, '').replace(/\/$/, '')
   return [
-    'Freundliche Grüsse',
+    invoiceTexts(language).regards,
     creditor.name,
     '',
     ...[creditor.brand, creditor.tradeName].filter((v): v is string => Boolean(v)),
@@ -51,14 +53,15 @@ function signature(creditor: Creditor): string[] {
   ]
 }
 
-function voidedText(invoices: InvoiceRecord[], creditor: Creditor, contact: string): string {
+function voidedText(invoices: InvoiceRecord[], creditor: Creditor, contact: string, language: InvoiceLanguage): string {
+  const t = invoiceTexts(language)
   return [
-    `Guten Tag ${contact}`,
+    t.greeting(contact),
     '',
-    'die Kündigung ist eingegangen. Diese Rechnungen sind storniert, bitte nicht bezahlen:',
-    ...invoices.map(i => `- ${i.number} über ${formatChf(i.amount)}`),
+    t.voidedIntro,
+    ...invoices.map(i => t.voidedLine(i.number, formatChf(i.amount, language))),
     '',
-    ...signature(creditor),
+    ...signature(creditor, language),
   ].join('\n')
 }
 
@@ -80,20 +83,23 @@ export function createResendNotifier(config: ResendNotifierConfig): (notice: Inv
     if (!address)
       throw new Error(`Abo von ${notice.userId} hat keine Rechnungsadresse`)
     const brand = config.creditor.brand ?? 'Wartungsheft'
+    // Sprache aus der Bestellung, steht an der Rechnungsadresse und gilt auch für Verlängerung und Storno
+    const language = invoiceLanguage(address.language)
+    const t = invoiceTexts(language)
     if (notice.type === 'invoice') {
       const pdf = await renderInvoicePdf({ creditor: config.creditor, address, invoice: notice.invoice })
       await send({
         to: [address.email],
-        subject: `Rechnung ${notice.invoice.number}, ${brand} Jahresabo`,
-        text: invoiceText(notice.invoice, config.creditor, config.appUrl, address.contact),
-        attachments: [{ filename: `Rechnung-${notice.invoice.number}.pdf`, content: Buffer.from(pdf).toString('base64') }],
+        subject: t.mailSubject(notice.invoice.number, brand),
+        text: invoiceText(notice.invoice, config.creditor, config.appUrl, address.contact, language),
+        attachments: [{ filename: `${t.invoice}-${notice.invoice.number}.pdf`, content: Buffer.from(pdf).toString('base64') }],
       }, `invoice-${notice.invoice.number}`)
       return
     }
     await send({
       to: [address.email],
-      subject: `${brand}: Rechnung storniert`,
-      text: voidedText(notice.invoices, config.creditor, address.contact),
+      subject: t.voidedSubject(brand),
+      text: voidedText(notice.invoices, config.creditor, address.contact, language),
     }, `voided-${notice.invoices.map(i => i.number).join('-')}`)
   }
 }

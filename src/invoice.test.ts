@@ -28,6 +28,17 @@ describe('parseOrder', () => {
     }
   })
 
+  it('übernimmt die Sprache fr, it oder en; Deutsch und Unbekanntes bleiben ohne Feld', () => {
+    for (const language of ['fr', 'it', 'en']) {
+      const result = parseOrder({ ...validOrder, language })
+      expect(result.ok && result.order.language).toBe(language)
+    }
+    for (const language of ['de', 'xx', undefined, 3]) {
+      const result = parseOrder({ ...validOrder, language })
+      expect(result.ok && result.order.language).toBeUndefined()
+    }
+  })
+
   it('Referenz ist freiwillig', () => {
     const { reference: _, ...rest } = validOrder
     const result = parseOrder(rest)
