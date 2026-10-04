@@ -76,6 +76,19 @@ describe('POST /billing/order', () => {
     expect(Object.keys(body.error.fields).sort()).toEqual(['acceptTerms', 'zip'])
   })
 
+  it('merkt sich die Sprache des Bestellers an der Rechnungsadresse, auch für Verlängerungen', async () => {
+    const { app, store, notices } = setup()
+    expect((await post(app, '/billing/order', { ...order, language: 'fr' })).status).toBe(200)
+    expect((await store.getSubscription('user-1'))?.billingAddress?.language).toBe('fr')
+    expect(notices[0]!.sub.billingAddress?.language).toBe('fr')
+  })
+
+  it('ohne oder mit unbekannter Sprache bleibt die Rechnung deutsch', async () => {
+    const { app, store } = setup()
+    await post(app, '/billing/order', { ...order, language: 'xx' })
+    expect((await store.getSubscription('user-1'))?.billingAddress?.language).toBeUndefined()
+  })
+
   it('legt das Abo an, verschickt die Rechnung und schaltet den Betrieb frei', async () => {
     const { app, store, notices } = setup()
     const res = await post(app, '/billing/order', order)
@@ -181,6 +194,14 @@ describe('interne Job-Endpunkte (Verlängerung, Zahlung)', () => {
     expect(notices.at(-1)).toMatchObject({ type: 'invoice', invoice: { vehicles: 7 } })
     // nicht zweimal
     expect((await postInternal(app, '/billing/renew', { vehicles: 7 })).status).toBe(409)
+  })
+
+  it('die Verlängerung übernimmt die Sprache der Bestellung', async () => {
+    const { app, notices, setToday } = setup()
+    await post(app, '/billing/order', { ...order, language: 'it' })
+    setToday('2027-08-20')
+    expect((await postInternal(app, '/billing/renew', { vehicles: 2 })).status).toBe(200)
+    expect(notices.at(-1)!.sub.billingAddress?.language).toBe('it')
   })
 
   it('trägt eine Zahlung über die Referenz ein', async () => {

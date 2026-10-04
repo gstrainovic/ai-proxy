@@ -3,7 +3,9 @@
  * Reine Funktionen: Bestellung prüfen, Rechnungsnummer und Zahlungsreferenz bilden, Rechnung anlegen.
  * PDF und Versand liegen in invoice-pdf.ts und invoice-mail.ts, der Ablauf des Abos in invoice-subscription.ts.
  */
+import type { InvoiceLanguage } from './invoice-texts.ts'
 import type { Audience } from './plans.ts'
+import { invoiceLanguage } from './invoice-texts.ts'
 import { calculateQRReferenceChecksum, calculateSCORReferenceChecksum, isQRIBAN } from 'swissqrbill/utils'
 import { yearlyPriceChf } from './plans.ts'
 
@@ -20,6 +22,8 @@ export interface BillingAddress {
   email: string
   /** Referenz oder Kostenstelle des Kunden, erscheint auf der Rechnung */
   reference?: string
+  /** Sprache von Rechnung und Mails (invoice-texts.ts); parseOrder lässt das Feld bei Deutsch weg */
+  language?: InvoiceLanguage
 }
 
 /** Rechnungssteller */
@@ -108,6 +112,7 @@ export function parseOrder(body: unknown): ParseResult {
   if (Object.keys(errors).length)
     return { ok: false, errors }
   const reference = text(b.reference)
+  const language = invoiceLanguage(b.language)
   return {
     ok: true,
     order: {
@@ -119,6 +124,7 @@ export function parseOrder(body: unknown): ParseResult {
       city: text(b.city),
       email,
       ...(reference ? { reference } : {}),
+      ...(language !== 'de' ? { language } : {}),
       vehicles,
     },
   }

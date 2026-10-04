@@ -1,7 +1,8 @@
 import type { Creditor } from './invoice-pdf.ts'
 import { describe, expect, it } from 'vitest'
 import { createInvoice } from './invoice.ts'
-import { formatChf, formatDay, invoiceLines, qrBillData, renderInvoicePdf } from './invoice-pdf.ts'
+import { formatChf, formatDay, invoiceLines, qrBillData, qrBillLanguage, renderInvoicePdf } from './invoice-pdf.ts'
+import { invoiceTexts } from './invoice-texts.ts'
 
 const creditor: Creditor = {
   name: 'Goran Strainovic',
@@ -22,6 +23,52 @@ describe('formatChf / formatDay', () => {
     expect(formatChf(180)).toBe('CHF 180.00')
     expect(formatChf(1234.5)).toBe('CHF 1\'234.50')
     expect(formatDay('2026-09-19')).toBe('19.09.2026')
+  })
+})
+
+describe('formatChf / formatDay je Sprache', () => {
+  it('en mit Komma und Schrägstrich, fr und it wie de', () => {
+    expect(formatChf(1234.5, 'en')).toBe('CHF 1,234.50')
+    expect(formatChf(1234.5, 'fr')).toBe('CHF 1\'234.50')
+    expect(formatDay('2026-09-19', 'en')).toBe('19/09/2026')
+    expect(formatDay('2026-09-19', 'it')).toBe('19.09.2026')
+  })
+})
+
+describe('Rechnung in der Sprache des Bestellers', () => {
+  const invoice = createInvoice({ userId: 'user-a', vehicles: 3, issueDate: '2026-09-20', periodStart: '2026-09-20', iban: creditor.iban })
+  const privat = createInvoice({ userId: 'user-p', vehicles: 2, issueDate: '2026-09-20', periodStart: '2026-09-20', iban: creditor.iban, audience: 'privat' })
+
+  it('positionen auf Französisch, Italienisch und Englisch', () => {
+    expect(invoiceLines(invoice, 'Wartungsheft', 'fr')).toEqual(['Abonnement annuel Wartungsheft Entreprise, du 20.09.2026 au 19.09.2027', '3 véhicules × CHF 36.00 par an'])
+    expect(invoiceLines(privat, 'Wartungsheft', 'it')).toEqual(['Abbonamento annuale Wartungsheft Privato, dal 20.09.2026 al 19.09.2027', '2 veicoli, fino a 5 veicoli CHF 25.00 all\'anno'])
+    expect(invoiceLines(invoice, 'Wartungsheft', 'en')).toEqual(['Wartungsheft annual subscription Business, 20/09/2026 to 19/09/2027', '3 vehicles × CHF 36.00 per year'])
+  })
+
+  it('mitteilung im QR-Zahlteil übersetzt', () => {
+    expect(qrBillData({ creditor, address: { ...address, language: 'fr' }, invoice }).message).toBe(`Facture ${invoice.number}`)
+    expect(qrBillData({ creditor, address: { ...address, language: 'it' }, invoice }).message).toBe(`Fattura ${invoice.number}`)
+    expect(qrBillData({ creditor, address, invoice }).message).toBe(`Rechnung ${invoice.number}`)
+  })
+
+  it('zahlteil in der Sprache der Rechnung', () => {
+    expect(qrBillLanguage('fr')).toBe('FR')
+    expect(qrBillLanguage('en')).toBe('EN')
+    expect(qrBillLanguage(undefined)).toBe('DE')
+  })
+
+  it('pDF entsteht in allen vier Sprachen', async () => {
+    for (const language of ['de', 'fr', 'it', 'en'] as const) {
+      const pdf = await renderInvoicePdf({ creditor, address: { ...address, language }, invoice })
+      expect(Buffer.from(pdf.subarray(0, 5)).toString()).toBe('%PDF-')
+    }
+  })
+
+  it('jede Sprache hat alle Texte, ohne ß', () => {
+    for (const language of ['fr', 'it', 'en'] as const) {
+      expect(Object.keys(invoiceTexts(language)).sort()).toEqual(Object.keys(invoiceTexts('de')).sort())
+      expect(JSON.stringify(invoiceTexts(language))).not.toContain('ß')
+    }
   })
 })
 

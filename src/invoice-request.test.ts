@@ -38,6 +38,14 @@ describe('invoiceRequestMail', () => {
     expect(mail.text).toContain('Jahresabo Privat')
   })
 
+  it('nennt die Sprache, in der die Rechnung geschrieben werden soll; der Auftrag selbst bleibt deutsch', () => {
+    const fr = { ...sub(), billingAddress: { ...address, language: 'fr' as const } }
+    const mail = invoiceRequestMail({ type: 'invoice', userId: 'user-1', sub: fr, invoice })
+    expect(mail.text).toContain('Sprache der Rechnung: Französisch')
+    expect(mail.text).toContain('Jahresabo Betrieb')
+    expect(invoiceRequestMail({ type: 'invoice', userId: 'user-1', sub: sub(), invoice }).text).toContain('Sprache der Rechnung: Deutsch')
+  })
+
   it('Storno nennt die Rechnungen, die nicht mehr gelten', () => {
     const mail = invoiceRequestMail({ type: 'voided', userId: 'user-1', sub: sub(), invoices: [invoice] })
     expect(mail.subject).toBe('Wartungsheft: Rechnung stornieren — Muster Sanitär AG')
