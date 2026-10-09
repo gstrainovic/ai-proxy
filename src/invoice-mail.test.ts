@@ -72,7 +72,7 @@ describe('createResendNotifier', () => {
 
   it('schreibt Rechnung und Storno in der Sprache der Rechnungsadresse', async () => {
     const expected = {
-      fr: { subject: `Facture ${invoice.number}, abonnement annuel Wartungsheft`, hallo: 'Bonjour Petra Muster', datei: `Facture-${invoice.number}.pdf`, storno: 'Wartungsheft : facture annulée', gruss: 'Meilleures salutations' },
+      fr: { subject: `Facture ${invoice.number}, abonnement annuel Wartungsheft`, hallo: 'Bonjour Petra Muster', datei: `Facture-${invoice.number}.pdf`, storno: 'Wartungsheft\u00A0: facture annulée', gruss: 'Meilleures salutations' },
       it: { subject: `Fattura ${invoice.number}, abbonamento annuale Wartungsheft`, hallo: 'Buongiorno Petra Muster', datei: `Fattura-${invoice.number}.pdf`, storno: 'Wartungsheft: fattura annullata', gruss: 'Cordiali saluti' },
       en: { subject: `Invoice ${invoice.number}, Wartungsheft annual subscription`, hallo: 'Hello Petra Muster', datei: `Invoice-${invoice.number}.pdf`, storno: 'Wartungsheft: invoice cancelled', gruss: 'Kind regards' },
     }
