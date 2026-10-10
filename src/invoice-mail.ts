@@ -1,7 +1,7 @@
 /**
  * Versand der Jahresrechnung über Resend: PDF an die Rechnungs-E-Mail des Kunden, Betreiber in Bcc, Antworten an
- * die Kontaktadresse. Stornos (Kündigung vor Beginn eines Jahres) gehen als kurze Mail ohne Anhang.
- * Genutzt vom Proxy (Bestellung, Kündigung) und vom Verlängerungs-Job.
+ * die Kontaktadresse. Stornos (der Kunde will keine weiteren Rechnungen, `/billing/stop`) gehen als kurze Mail ohne
+ * Anhang. Genutzt vom Proxy (Bestellung, Stopp) und vom Verlängerungs-Job.
  */
 import type { InvoiceNotice } from './app.ts'
 import type { Creditor, InvoiceRecord } from './invoice.ts'

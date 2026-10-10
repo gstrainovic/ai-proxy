@@ -36,6 +36,9 @@ describe('invoiceRequestMail', () => {
     const mail = invoiceRequestMail({ type: 'invoice', userId: 'user-1', sub: privat, invoice: next })
     expect(mail.subject).toBe('Wartungsheft: Rechnung schreiben — Petra Muster, CHF 25.00 (Verlängerung)')
     expect(mail.text).toContain('Jahresabo Privat')
+    // Die Verlängerungsrechnung ist ein Angebot, nichts verlängert sich von selbst (abo-regeln.md)
+    expect(mail.text).toContain('Angebot für ein weiteres Jahr')
+    expect(mail.text).not.toMatch(/verlängert sich/)
   })
 
   it('nennt die Sprache, in der die Rechnung geschrieben werden soll; der Auftrag selbst bleibt deutsch', () => {
@@ -50,6 +53,9 @@ describe('invoiceRequestMail', () => {
     const mail = invoiceRequestMail({ type: 'voided', userId: 'user-1', sub: sub(), invoices: [invoice] })
     expect(mail.subject).toBe('Wartungsheft: Rechnung stornieren — Muster Sanitär AG')
     expect(mail.text).toContain(`- ${invoice.number} über CHF 180.00`)
+    // Der Kunde kündigt nicht, er will keine weiteren Rechnungen (abo-regeln.md)
+    expect(mail.text).toContain('Der Kunde will keine weiteren Rechnungen.')
+    expect(mail.text).not.toMatch(/gekündigt|Kündigung/)
   })
 })
 
