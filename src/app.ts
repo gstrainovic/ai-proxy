@@ -10,7 +10,7 @@ import type { TrialState } from './trial.ts'
 import { createCheckout, createPortal, handleWebhook, notConfigured } from './billing.ts'
 import { feedbackMail, MAX_AUDIO_BYTES, parseFeedback } from './feedback.ts'
 import { isoDate, parseOrder } from './invoice.ts'
-import { cancelSubscription, effectiveSubscription, markInvoicePaid, openInvoices, orderSubscription, periodEnd, renewalDue, renewSubscription, resumeSubscription, retireSubscription } from './invoice-subscription.ts'
+import { effectiveSubscription, markInvoicePaid, openInvoices, orderSubscription, periodEnd, renewalDue, renewSubscription, retireSubscription, stopSubscription } from './invoice-subscription.ts'
 import { checkLimit, currentMonth, resolvePlan } from './limits.ts'
 import { checkBurst, createBurstState } from './rate-limit.ts'
 import { startTrial, trialState } from './trial.ts'
@@ -338,7 +338,7 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
     return c.json({ ok: true })
   })
 
-  // Jahresabo auf Rechnung: Bestellen mit Rechnungsadresse, Kündigen auf Ende der Laufzeit, Kündigung zurücknehmen
+  // Jahresabo auf Rechnung: Bestellen mit Rechnungsadresse; Verlängern, Zahlung und Stopp nur intern (unten)
   async function notify(notice: InvoiceNotice): Promise<boolean> {
     try {
       await deps.invoicing!.notify(notice)
@@ -366,36 +366,29 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
     return c.json({ invoice: result.invoice, mailed, manual: !!deps.invoicing.manual })
   })
 
-  app.post('/billing/cancel', async (c) => {
+  // Nur für den täglichen Abo-Job und den Betreiber (AI_PROXY_INTERNAL_TOKEN + x-user-id): der Job zählt die
+  // Fahrzeuge in der App, der Proxy erzeugt und verschickt die Rechnung. Nutzer selbst dürfen weder verlängern noch
+  // Zahlungen eintragen noch kündigen (kein Kündigen-Knopf: erst die Zahlung bindet, find-jobs/akquise/abo-regeln.md).
+  const internalOnly = (c: Context<{ Variables: Variables }>) =>
+    c.get('user').internal ? null : c.json({ error: { code: 'forbidden', message: 'Nur für interne Jobs.' } }, 403)
+
+  // Keine weiteren Rechnungen, wenn der Kunde das schreibt: offene Rechnungen storniert, das bezahlte Jahr läuft zu Ende
+  app.post('/billing/stop', async (c) => {
     if (!deps.invoicing)
       return notConfigured(c)
+    const denied = internalOnly(c)
+    if (denied)
+      return denied
     const userId = c.get('user').id
     const sub = await deps.store.getSubscription(userId)
-    if (!sub || sub.billing !== 'invoice' || effectiveSubscription(sub, today()).status !== 'active')
-      return c.json({ error: { code: 'no_subscription', message: 'Kein laufendes Abo auf Rechnung.' } }, 404)
-    const result = cancelSubscription(sub, today())
+    if (!sub || sub.billing !== 'invoice' || sub.status !== 'active')
+      return c.json({ error: { code: 'no_subscription', message: 'Kein Abo auf Rechnung.' } }, 404)
+    const result = stopSubscription(sub)
     await deps.store.setSubscription(userId, result.sub)
     if (result.voided.length)
       await notify({ type: 'voided', userId, sub: result.sub, invoices: result.voided })
-    return c.json({ billing: billingInfo(result.sub), voided: result.voided.length })
+    return c.json({ billing: billingInfo(effectiveSubscription(result.sub, today())), voided: result.voided.length })
   })
-
-  app.post('/billing/resume', async (c) => {
-    if (!deps.invoicing)
-      return notConfigured(c)
-    const userId = c.get('user').id
-    const sub = await deps.store.getSubscription(userId)
-    if (!sub || sub.billing !== 'invoice' || effectiveSubscription(sub, today()).status !== 'active')
-      return c.json({ error: { code: 'no_subscription', message: 'Kein laufendes Abo auf Rechnung.' } }, 404)
-    const next = resumeSubscription(sub)
-    await deps.store.setSubscription(userId, next)
-    return c.json({ billing: billingInfo(next) })
-  })
-
-  // Nur für den täglichen Abo-Job (AI_PROXY_INTERNAL_TOKEN + x-user-id): der Job zählt die Fahrzeuge in der App,
-  // der Proxy erzeugt und verschickt die Rechnung. Nutzer selbst dürfen weder verlängern noch Zahlungen eintragen.
-  const internalOnly = (c: Context<{ Variables: Variables }>) =>
-    c.get('user').internal ? null : c.json({ error: { code: 'forbidden', message: 'Nur für interne Jobs.' } }, 403)
 
   app.post('/billing/renew', async (c) => {
     if (!deps.invoicing)
