@@ -1,8 +1,10 @@
 /**
- * Jahresabo auf Rechnung (Betriebe): bestellen, kündigen, verlängern, Zahlung eintragen. Reine Funktionen auf
- * `Subscription`, Datum immer als ISO-Tag. Regeln: Zugang ab Bestellung, bezahltes Jahr beginnt nach der Testzeit,
- * verlängert sich jährlich mit Rechnung 30 Tage vor Ablauf nach dem dann aktuellen Fahrzeugstand, kündbar bis zum
- * Ablauf ohne Frist. Eine offene Verlängerung, deren Jahr noch nicht begonnen hat, wird bei Kündigung storniert.
+ * Jahresabo auf Rechnung (privat und Betriebe): bestellen, verlängern, Zahlung eintragen, stoppen. Reine Funktionen
+ * auf `Subscription`, Datum immer als ISO-Tag. Regeln (find-jobs/akquise/abo-regeln.md): verbindlich erst mit der
+ * Zahlung; das bezahlte Jahr beginnt nach der Testzeit; Zugang nach der Bestellung bis zur Zahlungsfrist, danach nur
+ * mit bezahltem Jahr. Nach einem bezahlten Jahr kommt 30 Tage vor Ablauf eine Verlängerungsrechnung nach dem dann
+ * aktuellen Fahrzeugstand als Angebot; nur wer sie zahlt, hat ein weiteres Jahr. Kein Kündigen durch den Kunden,
+ * keine Rückzahlung; auf Wunsch stoppt der Betreiber weitere Rechnungen (`stopSubscription`).
  */
 import type { InvoiceRecord, Order } from './invoice.ts'
 import type { Subscription } from './stores/types.ts'
@@ -23,14 +25,26 @@ export function periodEnd(sub: Subscription): string | undefined {
   return lastInvoice(sub)?.periodEnd
 }
 
-/** Rechnungs-Abo nach Ablauf der Laufzeit zählt wie abgelaufen; alles andere bleibt, wie es ist */
+/**
+ * Zugang eines Rechnungs-Abos: in der Testzeit, in einem bezahlten Jahr und nach der ersten Bestellung (noch nichts
+ * bezahlt) bis zur Zahlungsfrist der offenen Rechnung, damit niemand während der Zahlung gesperrt wird. Eine offene
+ * Verlängerung gibt keinen Zugang über das bezahlte Jahr hinaus; eine späte Zahlung schaltet wieder frei.
+ * Ohne Zugang zählt das Abo wie abgelaufen; alles andere bleibt, wie es ist.
+ */
 export function effectiveSubscription(sub: Subscription, today: string): Subscription {
   if (sub.billing !== 'invoice' || sub.status !== 'active')
     return sub
-  const end = periodEnd(sub)
-  if (end && end > today)
-    return sub
-  return { ...sub, status: 'canceled' }
+  return hasAccess(sub, today) ? sub : { ...sub, status: 'canceled' }
+}
+
+function hasAccess(sub: Subscription, today: string): boolean {
+  const invoices = sub.invoices ?? []
+  if (invoices.some(i => i.paidAt && today < i.periodEnd))
+    return true
+  const end = trialEnd(sub)
+  if (end && today < end)
+    return true
+  return !invoices.some(i => i.paidAt) && invoices.some(i => today <= i.dueAt)
 }
 
 function trialEnd(existing: Subscription | null): string | undefined {
@@ -63,21 +77,18 @@ export function orderSubscription(args: { existing: Subscription | null, order: 
 }
 
 /**
- * Kündigung auf Ende der Laufzeit. Offene Rechnungen, deren Jahr noch nicht begonnen hat, fallen weg (`voided`);
- * bleibt keine Rechnung übrig, endet das Abo sofort und die Testzeit gilt wieder.
+ * Keine weiteren Rechnungen (Admin, wenn der Kunde schreibt; einen Kündigen-Knopf gibt es nicht, weil erst die
+ * Zahlung bindet und nichts zurückbezahlt wird). Offene Rechnungen fallen weg (`voided`), keine Verlängerung mehr;
+ * das bezahlte Jahr läuft zu Ende. Bleibt keine Rechnung übrig, endet das Abo und die Testzeit gilt wieder.
  */
-export function cancelSubscription(sub: Subscription, today: string): { sub: Subscription, voided: InvoiceRecord[] } {
+export function stopSubscription(sub: Subscription): { sub: Subscription, voided: InvoiceRecord[] } {
   const invoices = sub.invoices ?? []
-  const voided = invoices.filter(i => !i.paidAt && i.periodStart > today)
-  const kept = invoices.filter(i => !voided.includes(i))
+  const voided = invoices.filter(i => !i.paidAt)
+  const kept = invoices.filter(i => i.paidAt)
   const next: Subscription = { ...sub, cancelAtPeriodEnd: true, invoices: kept }
   if (!kept.length)
     next.status = 'canceled'
   return { sub: next, voided }
-}
-
-export function resumeSubscription(sub: Subscription): Subscription {
-  return { ...sub, cancelAtPeriodEnd: false }
 }
 
 /**
@@ -90,11 +101,14 @@ export function retireSubscription(sub: Subscription | null): Subscription | nul
   return { ...sub, status: 'canceled', cancelAtPeriodEnd: true }
 }
 
+/** Verlängerungsrechnung (ein Angebot) 30 Tage vor Ablauf, nur nach einem bezahlten Jahr */
 export function renewalDue(sub: Subscription, today: string): boolean {
   if (sub.billing !== 'invoice' || sub.status !== 'active' || sub.cancelAtPeriodEnd)
     return false
-  const end = periodEnd(sub)
-  return !!end && addDays(end, -RENEWAL_LEAD_DAYS) <= today && end > today
+  const last = lastInvoice(sub)
+  if (!last?.paidAt)
+    return false
+  return addDays(last.periodEnd, -RENEWAL_LEAD_DAYS) <= today && last.periodEnd > today
 }
 
 export function renewSubscription(args: { sub: Subscription, userId: string, vehicles: number, today: string, iban: string }): Subscription {

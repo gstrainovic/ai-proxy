@@ -2,14 +2,13 @@ import type { Order } from './invoice.ts'
 import type { Subscription } from './stores/types.ts'
 import { describe, expect, it } from 'vitest'
 import {
-  cancelSubscription,
   effectiveSubscription,
   markInvoicePaid,
   orderSubscription,
   overdueInvoices,
   renewalDue,
   renewSubscription,
-  resumeSubscription,
+  stopSubscription,
 } from './invoice-subscription.ts'
 
 const IBAN = 'CH93 0076 2011 6238 5295 7'
@@ -64,19 +63,67 @@ describe('orderSubscription', () => {
     expect(orderSubscription({ existing: stripe, order, userId: 'user-a', today: '2026-09-20', iban: IBAN })).toEqual({ error: 'already_active' })
   })
 
-  it('nach Ablauf eines gekündigten Abos geht eine neue Bestellung', () => {
-    const { sub } = ordered('2026-09-19')
-    const { sub: canceled } = cancelSubscription(sub, '2026-10-01')
-    const again = orderSubscription({ existing: canceled, order, userId: 'user-a', today: '2027-09-20', iban: IBAN })
+  it('nach Ablauf des bezahlten Jahres geht eine neue Bestellung', () => {
+    const { sub, invoice } = ordered('2026-09-19')
+    const paid = markInvoicePaid(sub, invoice.reference, '2026-10-02')
+    const again = orderSubscription({ existing: paid, order, userId: 'user-a', today: '2027-09-20', iban: IBAN })
     expect('error' in again).toBe(false)
   })
 })
 
-describe('effectiveSubscription', () => {
-  it('bleibt aktiv bis zum Ende des bezahlten Jahres, danach wie abgelaufen', () => {
-    const { sub } = ordered('2026-09-19')
-    expect(effectiveSubscription(sub, '2027-09-18').status).toBe('active')
-    expect(effectiveSubscription(sub, '2027-09-19').status).toBe('canceled')
+/** Erste Rechnung bestellt am 19.09.2026 (nach der Testzeit) und bezahlt */
+function orderedAndPaid(paidAt = '2026-10-02') {
+  const { sub, invoice } = ordered('2026-09-19')
+  return markInvoicePaid(sub, invoice.reference, paidAt)
+}
+
+function renewed(sub: Subscription, vehicles = 6, today = '2027-08-20') {
+  return renewSubscription({ sub, userId: 'user-a', vehicles, today, iban: IBAN })
+}
+
+describe('Zugang (effectiveSubscription): verbindlich erst mit der Zahlung', () => {
+  it('nach der Bestellung Zugang bis zur Zahlungsfrist, ohne Zahlung danach nicht mehr', () => {
+    const { sub, invoice } = ordered('2026-09-19')
+    expect(invoice.dueAt).toBe('2026-10-19')
+    expect(effectiveSubscription(sub, '2026-10-19').status).toBe('active')
+    expect(effectiveSubscription(sub, '2026-10-20').status).toBe('canceled')
+    expect(effectiveSubscription(sub, '2027-03-01').status).toBe('canceled')
+  })
+
+  it('eine späte Zahlung schaltet das bezahlte Jahr wieder frei, bis zu dessen Ende', () => {
+    const { sub, invoice } = ordered('2026-09-19')
+    const paid = markInvoicePaid(sub, invoice.reference, '2026-11-15')
+    expect(effectiveSubscription(paid, '2026-11-15').status).toBe('active')
+    expect(effectiveSubscription(paid, '2027-09-18').status).toBe('active')
+    expect(effectiveSubscription(paid, '2027-09-19').status).toBe('canceled')
+  })
+
+  it('während der Testzeit bestellt: Zugang bis Testende, danach bis zur Zahlungsfrist', () => {
+    // Testzeit 01.09.–30.09., bestellt am 25.09., zahlbar bis 25.10.
+    const { sub } = ordered('2026-09-25', trialSince('2026-09-01'))
+    expect(effectiveSubscription(sub, '2026-10-25').status).toBe('active')
+    expect(effectiveSubscription(sub, '2026-10-26').status).toBe('canceled')
+  })
+
+  it('kurz nach Testbeginn bestellt: Zugang bis zur Frist, die knapp nach dem Testende liegt', () => {
+    // Testzeit bis 30.09., bestellt am 02.09., Frist 02.10.
+    const { sub } = ordered('2026-09-02', trialSince('2026-09-01'))
+    expect(effectiveSubscription(sub, '2026-10-02').status).toBe('active')
+    expect(effectiveSubscription(sub, '2026-10-03').status).toBe('canceled')
+  })
+
+  it('Verlängerung unbezahlt: das bezahlte Jahr läuft zu Ende, danach kein Zugang', () => {
+    const next = renewed(orderedAndPaid())
+    expect(effectiveSubscription(next, '2027-09-18').status).toBe('active')
+    expect(effectiveSubscription(next, '2027-09-19').status).toBe('canceled')
+  })
+
+  it('Verlängerung spät bezahlt: Zugang wieder bis zum Ende des neuen Jahres', () => {
+    const next = renewed(orderedAndPaid())
+    const paid = markInvoicePaid(next, next.invoices![1]!.reference, '2027-10-05')
+    expect(effectiveSubscription(paid, '2027-10-05').status).toBe('active')
+    expect(effectiveSubscription(paid, '2028-09-18').status).toBe('active')
+    expect(effectiveSubscription(paid, '2028-09-19').status).toBe('canceled')
   })
 
   it('Stripe-Abos bleiben unberührt', () => {
@@ -85,65 +132,50 @@ describe('effectiveSubscription', () => {
   })
 })
 
-describe('cancelSubscription', () => {
-  it('kündigt auf Ende der Laufzeit, Zugang bleibt bis dahin', () => {
-    const { sub } = ordered('2026-09-19')
-    const { sub: canceled, voided } = cancelSubscription(sub, '2026-12-01')
-    expect(canceled.cancelAtPeriodEnd).toBe(true)
-    expect(voided).toEqual([])
-    expect(effectiveSubscription(canceled, '2027-09-18').status).toBe('active')
-    expect(renewalDue(canceled, '2027-09-01')).toBe(false)
+describe('stopSubscription: keine weiteren Rechnungen (Admin, auf Wunsch des Kunden)', () => {
+  it('storniert die offene Verlängerung, das bezahlte Jahr läuft zu Ende, keine neue Rechnung', () => {
+    const next = renewed(orderedAndPaid())
+    const { sub: stopped, voided } = stopSubscription(next)
+    expect(voided.map(i => i.periodStart)).toEqual(['2027-09-19'])
+    expect(stopped.invoices).toHaveLength(1)
+    expect(effectiveSubscription(stopped, '2027-09-18').status).toBe('active')
+    expect(effectiveSubscription(stopped, '2027-09-19').status).toBe('canceled')
+    expect(renewalDue(stopped, '2027-09-01')).toBe(false)
   })
 
-  it('storniert eine Verlängerung, deren Jahr noch nicht begonnen hat, wenn sie offen ist', () => {
-    const { sub } = ordered('2026-09-19')
-    const renewed = renewSubscription({ sub, userId: 'user-a', vehicles: 6, today: '2027-08-20', iban: IBAN })
-    const { sub: canceled, voided } = cancelSubscription(renewed, '2027-09-01')
-    expect(voided).toHaveLength(1)
-    expect(voided[0]!.periodStart).toBe('2027-09-19')
-    expect(canceled.invoices).toHaveLength(1)
-    expect(effectiveSubscription(canceled, '2027-09-19').status).toBe('canceled')
-  })
-
-  it('eine bezahlte Verlängerung bleibt stehen', () => {
-    const { sub } = ordered('2026-09-19')
-    const renewed = renewSubscription({ sub, userId: 'user-a', vehicles: 6, today: '2027-08-20', iban: IBAN })
-    const paid = markInvoicePaid(renewed, renewed.invoices!.at(-1)!.reference, '2027-08-25')
-    const { voided } = cancelSubscription(paid, '2027-09-01')
-    expect(voided).toEqual([])
-  })
-
-  it('Kündigung vor Beginn des ersten Jahres storniert die Rechnung, das Abo endet', () => {
+  it('vor jeder Zahlung: Rechnung storniert, Abo endet, die Testzeit gilt wieder', () => {
     const { sub } = ordered('2026-09-10', trialSince('2026-09-01'))
-    const { sub: canceled, voided } = cancelSubscription(sub, '2026-09-15')
+    const { sub: stopped, voided } = stopSubscription(sub)
     expect(voided).toHaveLength(1)
-    expect(canceled.status).toBe('canceled')
-    expect(canceled.invoices).toEqual([])
+    expect(stopped.status).toBe('canceled')
+    expect(stopped.invoices).toEqual([])
   })
 
-  it('Kündigung lässt sich zurücknehmen, solange das Abo läuft', () => {
-    const { sub } = ordered('2026-09-19')
-    const { sub: canceled } = cancelSubscription(sub, '2026-12-01')
-    expect(resumeSubscription(canceled).cancelAtPeriodEnd).toBe(false)
+  it('eine bezahlte Rechnung bleibt stehen', () => {
+    const { voided } = stopSubscription(orderedAndPaid())
+    expect(voided).toEqual([])
   })
 })
 
 describe('Verlängerung', () => {
   it('ist 30 Tage vor Ablauf fällig, nicht früher, und nur einmal', () => {
-    const { sub } = ordered('2026-09-19')
+    const sub = orderedAndPaid()
     expect(renewalDue(sub, '2027-08-19')).toBe(false)
     expect(renewalDue(sub, '2027-08-20')).toBe(true)
-    const renewed = renewSubscription({ sub, userId: 'user-a', vehicles: 6, today: '2027-08-20', iban: IBAN })
-    expect(renewalDue(renewed, '2027-08-21')).toBe(false)
+    expect(renewalDue(renewed(sub), '2027-08-21')).toBe(false)
+  })
+
+  it('nur nach einem bezahlten Jahr: unbezahlte Rechnungen erzeugen keine Folge-Rechnung', () => {
+    const { sub } = ordered('2026-09-19')
+    expect(renewalDue(sub, '2027-08-20')).toBe(false)
+    // Verlängerung nicht bezahlt: ein Jahr später keine weitere Rechnung
+    const next = renewed(orderedAndPaid())
+    expect(renewalDue(next, '2028-08-20')).toBe(false)
   })
 
   it('rechnet den aktuellen Fahrzeugstand ab und schliesst lückenlos an', () => {
-    const { sub } = ordered('2026-09-19')
-    const renewed = renewSubscription({ sub, userId: 'user-a', vehicles: 7, today: '2027-08-20', iban: IBAN })
-    const next = renewed.invoices!.at(-1)!
+    const next = renewed(orderedAndPaid(), 7).invoices!.at(-1)!
     expect(next).toMatchObject({ amount: 252, vehicles: 7, periodStart: '2027-09-19', periodEnd: '2028-09-19', issuedAt: '2027-08-20' })
-    expect(renewed.vehicles).toBe(7)
-    expect(effectiveSubscription(renewed, '2028-09-18').status).toBe('active')
   })
 })
 

@@ -1,6 +1,6 @@
 # ai-proxy
 
-Kleiner Server zwischen App und Mistral-API. Er hält den Mistral-Key, zählt den Verbrauch pro Nutzer und Monat, setzt Plan-Limits durch und wickelt Abos über Stripe ab. Genutzt von [wartungsheft](https://github.com/gstrainovic/wartungsheft) und [dms](https://github.com/gstrainovic/dms), je mit eigener Instanz.
+Kleiner Server zwischen App und Mistral-API. Er hält den Mistral-Key, zählt den Verbrauch pro Nutzer und Monat, setzt Plan-Limits durch und stellt Jahresabos per QR-Rechnung aus. Genutzt von [wartungsheft](https://github.com/gstrainovic/wartungsheft) und [dms](https://github.com/gstrainovic/dms), je mit eigener Instanz.
 
 ## Endpunkte
 
@@ -17,8 +17,9 @@ Kleiner Server zwischen App und Mistral-API. Er hält den Mistral-Key, zählt de
 | `POST /billing/portal` | Stripe Kundenportal |
 | `POST /stripe/webhook` | Setzt den Plan nach Zahlung, Änderung oder Kündigung |
 | `POST /billing/order` | Jahresabo auf Rechnung bestellen (Rechnungsadresse, Fahrzeuge, Zustimmung); legt Abo und QR-Rechnung an und verschickt sie |
-| `POST /billing/cancel` | Rechnungs-Abo auf Ende der Laufzeit kündigen; offene Verlängerungen vor ihrem Beginn werden storniert |
-| `POST /billing/resume` | Kündigung zurücknehmen, solange das Abo läuft |
+| `POST /billing/renew` | Intern (Abo-Job): Verlängerungsrechnung 30 Tage vor Ablauf eines bezahlten Jahres |
+| `POST /billing/paid` | Intern: Zahlung über Referenz oder Rechnungsnummer eintragen |
+| `POST /billing/stop` | Intern (Betreiber, wenn der Kunde keine Rechnungen mehr will): offene Rechnungen stornieren, keine Verlängerung, bezahlte Zeit läuft zu Ende |
 | `GET /health` | Healthcheck |
 
 Bei erreichtem Limit antwortet der Proxy mit 402 im Mistral-Fehlerformat, sodass das AI SDK die Meldung durchreicht.
@@ -32,8 +33,11 @@ Bei erreichtem Limit antwortet der Proxy mit 402 im Mistral-Fehlerformat, sodass
   eine Person auf ihr Konto ab, etwa die Organisation in dms. Verbrauch, Testzeit, Abo und Fair-Use-Bremse laufen
   dann pro Konto; `null` heisst kein Konto (401). Interne Aufrufe geben das Konto direkt in `x-user-id` an.
 - **Jahresrechnung** (Store: InstantDB und Supabase; Versand und PDF nur im Node-Einstieg): `src/invoice.ts` prüft die Bestellung und bildet Nummer
-  und Zahlungsreferenz (QR-Referenz bei QR-IBAN, sonst SCOR), `src/invoice-subscription.ts` den Ablauf (Zugang ab
-  Bestellung, bezahltes Jahr nach der Testzeit, Verlängerung 30 Tage vor Ablauf, kündbar bis zum Ablauf),
+  und Zahlungsreferenz (QR-Referenz bei QR-IBAN, sonst SCOR), `src/invoice-subscription.ts` den Ablauf nach den
+  Abo-Regeln (`find-jobs/akquise/abo-regeln.md`: verbindlich erst mit der Zahlung, kein Kündigen durch den Kunden,
+  keine Rückzahlung): Zugang in der Testzeit, nach der Bestellung bis zur Zahlungsfrist, sonst nur in einem bezahlten
+  Jahr (eine späte Zahlung schaltet wieder frei); das bezahlte Jahr beginnt nach der Testzeit; nach einem bezahlten
+  Jahr 30 Tage vor Ablauf eine Verlängerungsrechnung als Angebot, solange sie offen ist keine weitere,
   `src/invoice-pdf.ts` das PDF mit QR-Zahlteil (pdfkit + swissqrbill), `src/invoice-mail.ts` den Versand über Resend.
   Aktiv mit `INVOICE_IBAN`, dazu `INVOICE_CREDITOR_NAME`, `INVOICE_STREET`, `INVOICE_ZIP`, `INVOICE_CITY`,
   `INVOICE_EMAIL`, optional `INVOICE_TRADE_NAME`, `INVOICE_BRAND`, `INVOICE_WEBSITE`, `INVOICE_FROM`, `INVOICE_BCC`.
@@ -41,11 +45,11 @@ Bei erreichtem Limit antwortet der Proxy mit 402 im Mistral-Fehlerformat, sodass
 - **Rechnung von Hand** (ohne `INVOICE_IBAN`): Bestellungen gehen trotzdem, sobald `INVOICE_EMAIL` oder
   `FEEDBACK_TO` gesetzt ist. Das Abo entsteht wie oben mit SCOR-Referenz; statt des PDF an den Kunden schickt
   `src/invoice-request.ts` dem Betreiber den Auftrag, die Rechnung zu schreiben (Nummer, Referenz, Betrag,
-  Fälligkeit, Rechnungsadresse), bei Kündigung die zu stornierenden Rechnungen. `/billing/order` meldet `manual: true`.
+  Fälligkeit, Rechnungsadresse), bei `/billing/stop` die zu stornierenden Rechnungen. `/billing/order` meldet `manual: true`.
 - **Rückmeldungen** aus der App (`/feedback`): Ziel ist `FEEDBACK_TO`, ersatzweise `INVOICE_EMAIL`, Absender
   `FEEDBACK_FROM`. Bewusst unabhängig von der IBAN, damit eine Instanz ohne Rechnungsstellung Fehler und Wünsche
-  trotzdem annimmt. Ohne Ziel antwortet `/feedback` mit 501, ohne `RESEND_TOKEN` landet alles im Log. Die Verlängerung läuft als Job in der App (auto-service
-  `scripts/renewals.ts`), der Proxy verlängert nicht selbst.
+  trotzdem annimmt. Ohne Ziel antwortet `/feedback` mit 501, ohne `RESEND_TOKEN` landet alles im Log. Die Verlängerung läuft als Job in der App (wartungsheft
+  `scripts/billing.ts`), der Proxy verlängert nicht selbst.
 - `src/stores/` Persistenz: `memory` für Tests, `instant` für InstantDB, `supabase` für Postgres (Tabellen `ai_usage`, `ai_subscriptions`, RPC `ai_add_usage`; Schema in dms `supabase/migrations/`, ab `00007_ai_proxy.sql`).
 - `src/auth/` Token-Prüfung: `instant` für InstantDB-Refresh-Tokens, `supabase` für Supabase-Access-Tokens (JWT der Session).
 - `src/node.ts` Einstieg für Node. Wählt das Backend nach Umgebung: `INSTANT_APP_ID` + `INSTANT_ADMIN_TOKEN` oder `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`.
@@ -88,9 +92,9 @@ docker build -t ai-proxy .
 docker run --env-file .env -p 8787:8787 ai-proxy
 ```
 
-## Geplant: Payrexx als zweiter Zahlungsanbieter
+## Kartenzahlung: nur einmalig pro Jahr
 
-Beide Apps wechseln auf Payrexx (CH, günstiger, Daten in der Schweiz; Entscheidung und Preise in dms/AGENTS.md). Dafür wird `billing.ts` hinter eine Schnittstelle gezogen: Stripe bleibt, Payrexx kommt dazu (Gateway mit `subscriptionState`, Webhook `X-Webhook-Signature` HMAC-SHA256 hex über den Raw-Body, Status active/overdue/failed/cancelled/in_notice, Kundenportal `POST /AuthToken`, Kündigen `DELETE /Subscription/{id}`, Auth `X-API-KEY`). Start, sobald das Payrexx-Konto freigegeben ist.
+Keine Kartenabos mit automatischer Abbuchung (`find-jobs/akquise/abo-regeln.md`). Die Stripe-Anbindung in `billing.ts` (`/billing/checkout`, `/billing/portal`, `/stripe/webhook`) ist nicht eingerichtet und nutzt `mode: 'subscription'`; bevor eine Instanz Karten annimmt, wird sie auf eine einmalige Zahlung pro Jahr umgebaut, ebenso ein späterer Payrexx-Anschluss (Gateway ohne Abo, Webhook `X-Webhook-Signature` HMAC-SHA256 hex über den Raw-Body, Auth `X-API-KEY`; Entscheidung und Preise in dms/AGENTS.md).
 
 ## Lizenz
 
