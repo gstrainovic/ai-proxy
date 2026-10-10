@@ -60,7 +60,7 @@ export function invoiceRequestMail(notice: InvoiceNotice): InvoiceRequestMail {
     return {
       subject: `Wartungsheft: Rechnung stornieren — ${customer}`,
       text: [
-        'Der Kunde hat gekündigt. Diese Rechnungen sind storniert; falls schon verschickt, bitte dem Kunden mitteilen:',
+        'Der Kunde will keine weiteren Rechnungen. Diese Rechnungen sind storniert; falls schon verschickt, bitte dem Kunden mitteilen:',
         '',
         ...notice.invoices.map(i => `- ${i.number} über ${formatChf(i.amount)} (Referenz ${i.reference})`),
         '',
@@ -77,7 +77,7 @@ export function invoiceRequestMail(notice: InvoiceNotice): InvoiceRequestMail {
     subject: `Wartungsheft: Rechnung schreiben — ${customer}, ${formatChf(notice.invoice.amount)} (${renewal ? 'Verlängerung' : 'Bestellung'})`,
     text: [
       renewal
-        ? 'Das Jahresabo verlängert sich. Bitte die Rechnung schreiben und an die Rechnungs-E-Mail schicken.'
+        ? 'Angebot für ein weiteres Jahr. Bitte die Rechnung schreiben und an die Rechnungs-E-Mail schicken.'
         : 'Neue Bestellung eines Jahresabos. Bitte die Rechnung schreiben und an die Rechnungs-E-Mail schicken.',
       'Der Zugang läuft schon; Nummer und Referenz wie unten übernehmen, dann ordnet der Kontoauszug die Zahlung zu.',
       '',
