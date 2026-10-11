@@ -57,6 +57,14 @@ describe('invoiceRequestMail', () => {
     expect(mail.text).toContain('Der Kunde will keine weiteren Rechnungen.')
     expect(mail.text).not.toMatch(/gekündigt|Kündigung/)
   })
+
+  it('Erinnerung: heute fällig, der Betreiber schickt sie dem Kunden selbst', () => {
+    const mail = invoiceRequestMail({ type: 'reminder', userId: 'user-1', sub: sub(), invoice })
+    expect(mail.subject).toBe(`Wartungsheft: Erinnerung schicken — Muster Sanitär AG, ${invoice.number}`)
+    expect(mail.text).toContain(`Rechnungsnummer: ${invoice.number}`)
+    expect(mail.text).toContain('heute fällig')
+    expect(mail.replyTo).toBe(sub().billingAddress!.email)
+  })
 })
 
 describe('createInvoiceRequestNotifier', () => {

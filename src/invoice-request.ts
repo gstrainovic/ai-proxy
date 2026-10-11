@@ -72,6 +72,22 @@ export function invoiceRequestMail(notice: InvoiceNotice): InvoiceRequestMail {
     }
   }
 
+  if (notice.type === 'reminder') {
+    return {
+      subject: `Wartungsheft: Erinnerung schicken — ${customer}, ${notice.invoice.number}`,
+      text: [
+        'Diese Rechnung ist heute fällig und noch offen. Bitte dem Kunden einmal freundlich erinnern: Wer weitermachen will, zahlt; sonst muss er nichts tun, es entstehen keine Kosten. Keine Mahnung.',
+        '',
+        ...invoiceBlock(notice.invoice),
+        '',
+        'Rechnungsadresse:',
+        ...addressLines(address),
+        ...footer,
+      ].join('\n'),
+      replyTo: address?.email ?? null,
+    }
+  }
+
   const renewal = (notice.sub.invoices?.length ?? 1) > 1
   return {
     subject: `Wartungsheft: Rechnung schreiben — ${customer}, ${formatChf(notice.invoice.amount)} (${renewal ? 'Verlängerung' : 'Bestellung'})`,

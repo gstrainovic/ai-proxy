@@ -96,6 +96,24 @@ export function createResendNotifier(config: ResendNotifierConfig): (notice: Inv
       }, `invoice-${notice.invoice.number}`)
       return
     }
+    if (notice.type === 'reminder') {
+      const pdf = await renderInvoicePdf({ creditor: config.creditor, address, invoice: notice.invoice })
+      await send({
+        to: [address.email],
+        subject: t.reminderSubject(notice.invoice.number, brand),
+        text: [
+          t.greeting(address.contact),
+          '',
+          t.reminderIntro(notice.invoice.number, formatDay(notice.invoice.dueAt, language)),
+          '',
+          t.reminderAction(formatChf(notice.invoice.amount, language)),
+          '',
+          ...signature(config.creditor, language),
+        ].join('\n'),
+        attachments: [{ filename: `${t.invoice}-${notice.invoice.number}.pdf`, content: Buffer.from(pdf).toString('base64') }],
+      }, `reminder-${notice.invoice.number}`)
+      return
+    }
     await send({
       to: [address.email],
       subject: t.voidedSubject(brand),

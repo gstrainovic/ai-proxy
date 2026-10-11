@@ -34,6 +34,22 @@ describe('texte der Abo-Rechnung halten die Abo-Regeln ein', () => {
     })
   }
 
+  for (const language of INVOICE_LANGUAGES) {
+    it(`${language}: Erinnerung am Fälligkeitstag sagt «heute fällig» und «ohne Zahlung nichts tun», ohne Mahnung`, () => {
+      const t = invoiceTexts(language)
+      const intro = t.reminderIntro('WH-1', '19.10.2026')
+      const action = t.reminderAction('CHF 180.00')
+      expect(t.reminderSubject('WH-1', 'Wartungsheft')).toContain('WH-1')
+      expect(intro).toContain('19.10.2026')
+      expect(action).toContain('CHF 180.00')
+      expect(action).toMatch(NICHTS_TUN[language])
+      for (const text of [intro, action]) {
+        for (const muster of VERBOTEN[language])
+          expect(text, `${language}: ${muster}`).not.toMatch(muster)
+      }
+    })
+  }
+
   it('mail nennt den Weg, keine weiteren Rechnungen zu bekommen: Antwort auf die Mail', () => {
     expect(invoiceTexts('de').mailRenewal('u')).toContain('antworte')
     expect(invoiceTexts('de').voidedIntro).toContain('keine weiteren Rechnungen')

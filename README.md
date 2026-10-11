@@ -18,6 +18,7 @@ Kleiner Server zwischen App und Mistral-API. Er hält den Mistral-Key, zählt de
 | `POST /stripe/webhook` | Setzt den Plan nach Zahlung, Änderung oder Kündigung |
 | `POST /billing/order` | Jahresabo auf Rechnung bestellen (Rechnungsadresse, Fahrzeuge, Zustimmung); legt Abo und QR-Rechnung an und verschickt sie |
 | `POST /billing/renew` | Intern (Abo-Job): Verlängerungsrechnung 30 Tage vor Ablauf eines bezahlten Jahres |
+| `POST /billing/remind` | Intern (Abo-Job): eine Erinnerung am Fälligkeitstag einer offenen Rechnung, mit PDF; gilt erst nach angenommener Mail als verschickt |
 | `POST /billing/paid` | Intern: Zahlung über Referenz oder Rechnungsnummer eintragen |
 | `POST /billing/stop` | Intern (Betreiber, wenn der Kunde keine Rechnungen mehr will): offene Rechnungen stornieren, keine Verlängerung, bezahlte Zeit läuft zu Ende |
 | `GET /health` | Healthcheck |

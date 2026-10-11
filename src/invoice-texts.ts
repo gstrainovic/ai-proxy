@@ -40,6 +40,9 @@ const de = {
   mailRenewal: (url: string) => `Verbindlich wird das Abo erst mit der Zahlung, für ein Jahr. Zahlst du nicht, musst du nichts tun: Es entstehen keine Kosten, KI-Scan und Chat enden. Nichts verlängert sich von selbst, die Rechnung fürs nächste Jahr kommt 30 Tage vor Ablauf als Angebot. Willst du keine weiteren Rechnungen, antworte kurz auf diese Mail. Dein Abo siehst du in der App unter Einstellungen (${url}).`,
   voidedIntro: 'du willst keine weiteren Rechnungen, das ist erledigt. Diese Rechnungen sind storniert, bitte nicht bezahlen:',
   voidedLine: (number: string, amount: string) => `- ${number} über ${amount}`,
+  reminderSubject: (number: string, brand: string) => `Erinnerung: Rechnung ${number}, ${brand} Jahresabo`,
+  reminderIntro: (number: string, due: string) => `die Rechnung ${number} im Anhang ist heute, am ${due}, fällig.`,
+  reminderAction: (amount: string) => `Möchtest du weitermachen, zahle ${amount} heute mit dem QR-Zahlteil im PDF, am einfachsten im E-Banking oder mit der Banking-App. Sonst musst du nichts tun: Es entstehen keine Kosten, KI-Scan und Chat enden morgen, deine Daten bleiben. Kommt die Zahlung später, schaltet sie KI-Scan und Chat wieder frei.`,
   regards: 'Freundliche Grüsse',
 }
 
@@ -72,6 +75,9 @@ const TEXTS: Record<InvoiceLanguage, InvoiceTexts> = {
     mailRenewal: url => `L’abonnement ne devient ferme qu’avec le paiement, pour un an. Si tu ne paies pas, tu n’as rien à faire : aucun frais, le scan IA et le chat s’arrêtent. Rien ne se prolonge tout seul, la facture pour l’année suivante arrive 30 jours avant l’échéance, comme une offre. Si tu ne veux plus de factures, réponds brièvement à cet e-mail. Tu vois ton abonnement dans l’app sous Réglages (${url}).`,
     voidedIntro: 'Tu ne veux plus de factures, c’est noté. Ces factures sont annulées, merci de ne pas les payer :',
     voidedLine: (number, amount) => `- ${number} de ${amount}`,
+    reminderSubject: (number, brand) => `Rappel : facture ${number}, abonnement annuel ${brand}`,
+    reminderIntro: (number, due) => `La facture ${number} en annexe est due aujourd’hui, le ${due}.`,
+    reminderAction: amount => `Si tu veux continuer, paie ${amount} aujourd’hui avec la section paiement QR du PDF, le plus simple dans l’e-banking ou avec l’app de ta banque. Sinon, tu n’as rien à faire : aucun frais, le scan IA et le chat s’arrêtent demain, tes données restent. Si le paiement arrive plus tard, il réactive le scan IA et le chat.`,
     regards: 'Meilleures salutations',
   },
   it: {
@@ -99,6 +105,9 @@ const TEXTS: Record<InvoiceLanguage, InvoiceTexts> = {
     mailRenewal: url => `L'abbonamento diventa vincolante solo con il pagamento, per un anno. Se non paghi, non devi fare nulla: nessun costo, scansione IA e chat si fermano. Nulla si prolunga da sé, la fattura per l'anno successivo arriva 30 giorni prima della scadenza, come offerta. Se non vuoi altre fatture, rispondi brevemente a questa e-mail. Vedi il tuo abbonamento nell'app sotto Impostazioni (${url}).`,
     voidedIntro: 'non vuoi altre fatture, è fatto. Queste fatture sono annullate, per favore non pagarle:',
     voidedLine: (number, amount) => `- ${number} di ${amount}`,
+    reminderSubject: (number, brand) => `Promemoria: fattura ${number}, abbonamento annuale ${brand}`,
+    reminderIntro: (number, due) => `la fattura ${number} in allegato scade oggi, il ${due}.`,
+    reminderAction: amount => `Se vuoi continuare, paga ${amount} oggi con la sezione di pagamento QR nel PDF, il modo più semplice è l'e-banking o l'app della tua banca. Altrimenti non devi fare nulla: nessun costo, scansione IA e chat si fermano domani, i tuoi dati restano. Se il pagamento arriva più tardi, riattiva scansione IA e chat.`,
     regards: 'Cordiali saluti',
   },
   en: {
@@ -126,6 +135,9 @@ const TEXTS: Record<InvoiceLanguage, InvoiceTexts> = {
     mailRenewal: url => `The subscription only becomes binding with payment, for one year. If you don't pay, you don't need to do anything: no costs, AI scan and chat stop. Nothing extends by itself; the invoice for the next year comes 30 days before expiry, as an offer. If you don't want any further invoices, just reply briefly to this email. You can see your subscription in the app under Settings (${url}).`,
     voidedIntro: 'You don\'t want any further invoices, done. These invoices are cancelled, please do not pay them:',
     voidedLine: (number, amount) => `- ${number} for ${amount}`,
+    reminderSubject: (number, brand) => `Reminder: invoice ${number}, ${brand} annual subscription`,
+    reminderIntro: (number, due) => `The attached invoice ${number} is due today, ${due}.`,
+    reminderAction: amount => `To continue, pay ${amount} today using the QR payment part in the PDF, easiest via e-banking or your banking app. Otherwise you don't need to do anything: no costs, AI scan and chat stop tomorrow, your data stays. If payment arrives later, it unlocks AI scan and chat again.`,
     regards: 'Kind regards',
   },
 }

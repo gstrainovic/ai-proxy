@@ -62,6 +62,8 @@ export interface InvoiceRecord {
   paidAt?: string
   /** Buchungsreferenz der Bank (`AcctSvcrRef` aus camt.054), gesetzt bei einer Zahlung aus dem Kontoauszug */
   bankRef?: string
+  /** ISO-Tag der Erinnerung am Fälligkeitstag; es gibt nur eine */
+  remindedAt?: string
   /** Preisliste der Rechnung; fehlt bei Rechnungen aus der Zeit vor den Privatabos (dann Betrieb) */
   audience?: Audience
 }
