@@ -306,3 +306,52 @@ describe('Rechnung von Hand (ohne IBAN)', () => {
     expect((await usage(app)).billing.openInvoice).toBeNull()
   })
 })
+
+describe('Erinnerung am Fälligkeitstag (POST /billing/remind)', () => {
+  // Bestellung am 19.09.2026, zahlbar bis 19.10.2026
+  it('geht einmal genau am Fälligkeitstag einer offenen Rechnung, mit der Rechnung', async () => {
+    const { app, notices, setToday } = setup()
+    const { invoice } = (await (await post(app, '/billing/order', order)).json()) as any
+    setToday('2026-10-18')
+    expect((await postInternal(app, '/billing/remind')).status).toBe(409)
+    setToday('2026-10-19')
+    const res = await postInternal(app, '/billing/remind')
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as any).mailed).toBe(true)
+    expect(notices.at(-1)).toMatchObject({ type: 'reminder', invoice: { number: invoice.number } })
+    expect((await postInternal(app, '/billing/remind')).status).toBe(409)
+    setToday('2026-10-20')
+    expect((await postInternal(app, '/billing/remind')).status).toBe(409)
+    expect(notices.filter(n => n.type === 'reminder')).toHaveLength(1)
+  })
+
+  it('keine Erinnerung für bezahlte und nach dem Stopp stornierte Rechnungen', async () => {
+    const paid = setup()
+    await orderAndPay(paid.app)
+    paid.setToday('2026-10-19')
+    expect((await postInternal(paid.app, '/billing/remind')).status).toBe(409)
+
+    const stopped = setup()
+    await post(stopped.app, '/billing/order', order)
+    await postInternal(stopped.app, '/billing/stop')
+    stopped.setToday('2026-10-19')
+    expect((await postInternal(stopped.app, '/billing/remind')).status).toBe(409)
+  })
+
+  it('scheitert der Versand, versucht es ein späterer Lauf am selben Tag nochmals', async () => {
+    const { app, store, setToday } = setup({ failMail: true })
+    await post(app, '/billing/order', order)
+    setToday('2026-10-19')
+    const res = await postInternal(app, '/billing/remind')
+    expect(((await res.json()) as any).mailed).toBe(false)
+    expect((await store.getSubscription('user-1'))?.invoices?.[0]?.remindedAt).toBeUndefined()
+    expect((await postInternal(app, '/billing/remind')).status).toBe(200)
+  })
+
+  it('nur mit internem Token', async () => {
+    const { app, setToday } = setup()
+    await post(app, '/billing/order', order)
+    setToday('2026-10-19')
+    expect((await post(app, '/billing/remind')).status).toBe(403)
+  })
+})

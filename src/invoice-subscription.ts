@@ -144,6 +144,20 @@ export function markInvoicePaid(sub: Subscription, key: string, paidAt: string, 
   return { ...sub, invoices: invoices.map((inv, i) => (i === index ? paid : inv)) }
 }
 
+/**
+ * Offene Rechnung, an die heute erinnert wird: einmal am Fälligkeitstag, dem letzten Tag der Zahlungsfrist. Nach
+ * `stopSubscription` sind offene Rechnungen weg, bezahlte brauchen keine Erinnerung.
+ */
+export function reminderDue(sub: Subscription, today: string): InvoiceRecord | undefined {
+  if (sub.billing !== 'invoice' || sub.status !== 'active')
+    return undefined
+  return openInvoices(sub).find(i => i.dueAt === today && !i.remindedAt)
+}
+
+export function markReminded(sub: Subscription, number: string, today: string): Subscription {
+  return { ...sub, invoices: (sub.invoices ?? []).map(i => (i.number === number ? { ...i, remindedAt: today } : i)) }
+}
+
 export function openInvoices(sub: Subscription): InvoiceRecord[] {
   return (sub.invoices ?? []).filter(i => !i.paidAt)
 }

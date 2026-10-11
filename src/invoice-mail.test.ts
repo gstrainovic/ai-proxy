@@ -98,3 +98,20 @@ describe('createResendNotifier', () => {
     await expect(notify({ type: 'invoice', userId: 'user-a', sub, invoice })).rejects.toThrow(/422/)
   })
 })
+
+describe('Erinnerung am Fälligkeitstag', () => {
+  it('schickt die offene Rechnung nochmals als PDF mit «heute fällig» und ohne Druck', async () => {
+    const { calls, fetchFn } = capture()
+    const notify = createResendNotifier({ token: 're_test', from: 'Wartungsheft <rechnung@wartungsheft.ch>', bcc: 'info@wartungsheft.ch', creditor, appUrl: 'https://wartungsheft.ch', fetch: fetchFn })
+    await notify({ type: 'reminder', userId: 'user-a', sub, invoice })
+    const { headers, body } = calls[0]!
+    expect(headers['Idempotency-Key']).toBe(`reminder-${invoice.number}`)
+    expect(body.to).toEqual(['b@muster.ch'])
+    expect(body.subject).toBe(`Erinnerung: Rechnung ${invoice.number}, Wartungsheft Jahresabo`)
+    expect(body.text).toContain('heute, am 19.10.2026')
+    expect(body.text).toContain('CHF 180.00')
+    expect(body.text).toContain('nichts tun')
+    expect(body.text).not.toMatch(/Mahnung/)
+    expect(body.attachments[0].filename).toBe(`Rechnung-${invoice.number}.pdf`)
+  })
+})

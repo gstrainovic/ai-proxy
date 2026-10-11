@@ -50,8 +50,9 @@ const billing = config.stripeSecretKey && config.stripeWebhookSecret
 // Jahresrechnung: mit IBAN als QR-Rechnung an den Kunden, ohne IBAN als Auftrag an den Betreiber, der sie von Hand
 // schreibt (invoice-request.ts). Ohne RESEND_TOKEN nur protokollieren, damit lokal und in E2E nichts verschickt wird.
 function logNotice(notice: InvoiceNotice): Promise<void> {
-  const numbers = notice.type === 'invoice' ? notice.invoice.number : notice.invoices.map(i => i.number).join(', ')
-  console.warn(`[ai-proxy] ${notice.type === 'invoice' ? 'Rechnung' : 'Storno'} ${numbers} für ${notice.userId} (kein RESEND_TOKEN, nicht versandt)`)
+  const numbers = notice.type === 'voided' ? notice.invoices.map(i => i.number).join(', ') : notice.invoice.number
+  const art = { invoice: 'Rechnung', voided: 'Storno', reminder: 'Erinnerung' }[notice.type]
+  console.warn(`[ai-proxy] ${art} ${numbers} für ${notice.userId} (kein RESEND_TOKEN, nicht versandt)`)
   return Promise.resolve()
 }
 const invoicingConfig = config.invoicing

@@ -10,7 +10,7 @@ import type { TrialState } from './trial.ts'
 import { createCheckout, createPortal, handleWebhook, notConfigured } from './billing.ts'
 import { feedbackMail, MAX_AUDIO_BYTES, parseFeedback } from './feedback.ts'
 import { isoDate, parseOrder } from './invoice.ts'
-import { effectiveSubscription, markInvoicePaid, openInvoices, orderSubscription, periodEnd, renewalDue, renewSubscription, retireSubscription, stopSubscription } from './invoice-subscription.ts'
+import { effectiveSubscription, markInvoicePaid, markReminded, openInvoices, orderSubscription, periodEnd, reminderDue, renewalDue, renewSubscription, retireSubscription, stopSubscription } from './invoice-subscription.ts'
 import { checkLimit, currentMonth, resolvePlan } from './limits.ts'
 import { checkBurst, createBurstState } from './rate-limit.ts'
 import { startTrial, trialState } from './trial.ts'
@@ -64,6 +64,7 @@ export interface AppDeps {
 export type InvoiceNotice =
   | { type: 'invoice', userId: string, sub: Subscription, invoice: InvoiceRecord }
   | { type: 'voided', userId: string, sub: Subscription, invoices: InvoiceRecord[] }
+  | { type: 'reminder', userId: string, sub: Subscription, invoice: InvoiceRecord }
 
 /** Rückmeldung aus der App an den Betreiber; die Aufnahme hängt als Datei an */
 export interface FeedbackNotice {
@@ -435,6 +436,25 @@ export function createApp(deps: AppDeps, options: AppOptions = {}): App {
     }
     await deps.store.setSubscription(userId, next)
     return c.json({ billing: billingInfo(next) })
+  })
+
+  // Eine Erinnerung am Fälligkeitstag der offenen Rechnung (täglicher Abo-Job); gilt erst als verschickt, wenn die
+  // Mail angenommen ist, sonst versucht es der nächste Lauf am selben Tag
+  app.post('/billing/remind', async (c) => {
+    if (!deps.invoicing)
+      return notConfigured(c)
+    const denied = internalOnly(c)
+    if (denied)
+      return denied
+    const userId = c.get('user').id
+    const sub = await deps.store.getSubscription(userId)
+    const invoice = sub && reminderDue(sub, today())
+    if (!sub || !invoice)
+      return c.json({ error: { code: 'not_due', message: 'Keine Erinnerung fällig.' } }, 409)
+    const mailed = await notify({ type: 'reminder', userId, sub, invoice })
+    if (mailed)
+      await deps.store.setSubscription(userId, markReminded(sub, invoice.number, today()))
+    return c.json({ invoice, mailed })
   })
 
   /**
