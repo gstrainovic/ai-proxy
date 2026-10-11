@@ -50,6 +50,15 @@ describe('texte der Abo-Rechnung halten die Abo-Regeln ein', () => {
     })
   }
 
+  it('kein Gedankenstrich als Satzzeichen in Texten an den Kunden', () => {
+    for (const language of INVOICE_LANGUAGES) {
+      const t = invoiceTexts(language)
+      const texte = [t.terms('m'), t.mailAmount('CHF 1.00', '1.1.2027'), t.mailRenewal('u'), t.mailIntro('N', 'T', 'V'), t.voidedIntro, t.reminderIntro('N', 'D'), t.reminderAction('A')]
+      for (const text of texte)
+        expect(text, language).not.toMatch(/ [—–] /)
+    }
+  })
+
   it('mail nennt den Weg, keine weiteren Rechnungen zu bekommen: Antwort auf die Mail', () => {
     expect(invoiceTexts('de').mailRenewal('u')).toContain('antworte')
     expect(invoiceTexts('de').voidedIntro).toContain('keine weiteren Rechnungen')
